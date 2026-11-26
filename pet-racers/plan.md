@@ -15,6 +15,8 @@ match it.
 - [x] Pick screen with the card scans; remember the last pet
 - [x] Listed on the games home page and in the root README
 - [x] Racing friends: up to five iPads in a room through the host, powers hit friends
+- [x] Zeus, Plufulous and Scarlet Ivy: models, karts (Sushi Burger, Burger Kart, Maki Roll),
+  powers (Math Defeater, Instant Hacking, Fashion Shoot), burger snacks, eight on the grid
 - [x] Backyard and Kitchen tracks, picked on the pick screen (by the host in a room)
 
 ## Next

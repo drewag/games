@@ -34,6 +34,7 @@ const PAL = {
   G: '#4caf50', h: '#9ccc65', r: '#e53935', c: '#7a4524', d: '#4e2914',
   f: '#d32f2f', l: '#7ec8e3', s: '#a8a8a8', S: '#d8d8d8', T: '#d9a066',
   B: '#5a3214', Y: '#ffcf3f', P: '#ff7eb6', W: '#fff3e0', O: '#e8d7a8',
+  z: '#e39b2e', Q: '#2fb5b5', U: '#3a8fd8', a: '#6d6d78', V: '#1c171b',
 };
 const OUTLINE = '#2a2228';
 
@@ -109,6 +110,50 @@ const PETS = [
     '....uuuu....',
     '....u..u....',
   ]},
+  { name: 'Zeus', fav: 'sushi', rows: [
+    'll........QQ',
+    'llzzzzzzzzQQ',
+    '.zzzzzzzzzz.',
+    '.zgzzzzzkzz.',
+    '.zgzzzzkzzz.',
+    '.zzzzzzzkzz.',
+    '.zzzznnzzzz.',
+    'ppzzzzzzzzpp',
+    '.ppzzzzzzpp.',
+    '....zzzz....',
+    '....zzzz....',
+    '....z..z....',
+  ]},
+  { name: 'Plufulous', fav: 'burger', rows: [
+    '...roYGlu...',
+    '...wwwwww...',
+    '...wwwwww...',
+    '.wwwwwwwwww.',
+    'wUUUUwwUUUUw',
+    'wUaaUUUUaaUw',
+    'wUUUUwwUUUUw',
+    'wwwwwnnwwwww',
+    'ppwwwwwwwwpp',
+    'pppwwwwwwppp',
+    '...wwwwww...',
+    '....wwww....',
+    '....w..w....',
+  ]},
+  { name: 'Scarlet Ivy', fav: 'sushi', rows: [
+    '..VVVVGGoG..',
+    '..VVVVGoGG..',
+    'VVVVVVGGoGGo',
+    '.wwwwwwwwww.',
+    '.wgwwwwwkww.',
+    '.wgwwwwkwww.',
+    '.wwwwwwwkww.',
+    '.wwwwnnwwww.',
+    'ppwwwrrwwwpp',
+    'pppwwwwwwppp',
+    '...wwwwww...',
+    '....wwww....',
+    '....w..w....',
+  ]},
 ];
 
 const SNACKS = {
@@ -159,6 +204,23 @@ const SNACKS = {
     '..h..',
     '..h..',
   ],
+  sushi: [
+    '..oooooo..',
+    '.oWoooWoo.',
+    'wwwwkkwwww',
+    'wwwwkkwwww',
+    '.wwwkkwww.',
+  ],
+  burger: [
+    '..TTTT..',
+    '.TWTTWT.',
+    'TTTTTTTT',
+    'GhGhGhGh',
+    'YYYYYYYY',
+    'BBBBBBBB',
+    'TTTTTTTT',
+    '.TTTTTT.',
+  ],
   heart: [
     '.rr.rr.',
     'rrrrrrr',
@@ -176,7 +238,7 @@ const SNACKS = {
     '...S...',
   ],
 };
-const GOOD = ['cookie', 'granola', 'applesauce', 'goldfish'];
+const GOOD = ['cookie', 'granola', 'applesauce', 'goldfish', 'sushi', 'burger'];
 const BAD = ['broccoli', 'oatmeal'];
 
 const TITLE_FONT = '"Arial Black", "Arial Rounded MT Bold", Impact, system-ui, sans-serif';
@@ -915,7 +977,7 @@ function drawSelect() {
   const sceneH = drawScenePicker(H - safeBottom - bestH);
   const cardsTop = titleBottom + subSize * 1.6;
   const footer = sceneH + bestH + safeBottom + 8;
-  const cols = W > H * 1.2 ? 5 : 3;
+  const cols = W > H * 1.2 ? Math.ceil(PETS.length / 2) : 3;
   const rowsN = Math.ceil(PETS.length / cols);
   const gap = 12;
   let cw = Math.min(200, (W - pad * 2 - gap * (cols - 1)) / cols);
@@ -924,7 +986,8 @@ function drawSelect() {
   // portrait phones: two columns of bigger cards if there's room
   if (cols === 3) {
     const cw2 = Math.min(200, (W - pad * 2 - gap) / 2);
-    const ch2 = Math.min(cw2 * 1.15, (availH - 2 * gap) / 3);
+    const rows2 = Math.ceil(PETS.length / 2);
+    const ch2 = Math.min(cw2 * 1.15, (availH - (rows2 - 1) * gap) / rows2);
     if (ch2 >= cw2 * 0.95) { return drawCards(2, cw2, ch2, gap, cardsTop, availH); }
   }
   if (ch * rowsN + gap * (rowsN - 1) > availH) {

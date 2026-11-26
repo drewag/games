@@ -38,7 +38,7 @@ mid-race or to a full room gets `no {why: busy | full}` and is closed.
 - **The host drives the rivals.** Guests run them forward at their speed and ease toward
   each update. Catch-up uses the average progress of everyone in the room.
 - **A power's owner decides what it hits.** Effects are mirrored with `fx {o, k, ...}` (the
-  owner's pet, then ring, ball or cake), and only the owner checks for hits. A hit on a
+  owner's pet, then ring, ball, cake, plus, hack or flash), and only the owner checks for hits. A hit on a
   friend, or on a rival when we aren't the host, is sent as `spin {who}`. The host applies
   rival spins and forwards every `spin`, `fx` and `gone` to the other guests. Each iPad
   acts only on a `spin` for its own pet.

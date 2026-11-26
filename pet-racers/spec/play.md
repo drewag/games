@@ -1,13 +1,13 @@
 # How it plays
 
-Pet Racers is a kart racer: three laps of a track against four rivals, or against
+Pet Racers is a kart racer: three laps of a track against seven rivals, or against
 friends on other iPads with rivals filling the remaining spots. The hard parts
 of the genre are taken away for a 9-year-old. The kart accelerates by itself, you can't
 fall off or get stuck, and nobody is far behind for long.
 
 ## Picking a pet
 
-The title screen shows the five card scans in a row. Tapping a card picks that pet: it
+The title screen shows the eight card scans in a row. Tapping a card picks that pet: it
 appears in its kart, slowly turning, with the kart's name and the power's name under it.
 Below the cards, **Park**, **Backyard** and **Kitchen** pick the track. **Race!** starts.
 The game remembers the last pet and track picked.
@@ -27,7 +27,7 @@ makes steering a correction, not a constant job. Arrow keys and space work on a 
 
 Karts start on a staggered grid behind the start line, with your racer at the back. A
 3-2-1-GO countdown starts the race. The top of the screen shows the lap (1/3) and your
-place (1st–5th). After the third lap, a card shows your place and time and offers
+place (1st–8th). After the third lap, a card shows your place and time and offers
 **Race again!** or a different pet.
 
 - **Off the road** (grass, or the kitchen counter) beyond the curbs slows the kart to
@@ -40,7 +40,7 @@ place (1st–5th). After the third lap, a card shows your place and time and off
 
 ## Snacks and the meter
 
-Snacks float over the track in rows across it: tacos, sushi, ramen and popcorn, mixed.
+Snacks float over the track in rows across it: tacos, sushi, ramen, popcorn and burgers, mixed.
 Driving through one eats it, and it comes back a few seconds later. The **meter** in the
 top corner has 3 segments. A snack fills one; your pet's favorite food fills two. A full
 meter lights up the Power button, and using the power empties it.
@@ -63,7 +63,7 @@ offers:
 
 The iPad that made the room is the **host**. Everyone who joins lands on the pick screen
 together, and the host's pick screen keeps showing the room code so more can join. Only
-the pick screen takes new people: a room that's mid-race, or that has all five pets, turns
+the pick screen takes new people: a room that's mid-race, or that already has five iPads, turns
 joiners away with a message. Two people can't have the same pet. Taken cards say "Friend",
 and anyone who joins holding a taken pet gets the first free one. The host gets **Start!**
 picks the track (other iPads follow it and can't change it), and chooses **Race again!** or

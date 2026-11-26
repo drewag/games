@@ -70,12 +70,12 @@
   }
   #pick {
     position: absolute; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%);
-    padding: 14px 20px 16px; text-align: center; width: min(760px, calc(100vw - 40px)); box-sizing: border-box;
+    padding: 14px 20px 16px; text-align: center; width: min(940px, calc(100vw - 40px)); box-sizing: border-box;
   }
-  #cards { display: flex; justify-content: center; gap: min(14px, 1.6vw); margin-bottom: 10px; }
+  #cards { display: flex; justify-content: center; gap: min(12px, 1.2vw); margin-bottom: 10px; }
   .pc {
     padding: 0; border: 4px solid var(--ink); border-radius: 6px; background: #fff; cursor: pointer;
-    width: min(118px, 16vw); aspect-ratio: 3 / 4; overflow: hidden; opacity: 0.7;
+    width: min(96px, 10.4vw); aspect-ratio: 3 / 4; overflow: hidden; opacity: 0.7;
     transition: transform 0.15s, opacity 0.15s; box-shadow: 3px 4px 0 rgba(90, 50, 20, 0.25);
   }
   .pc:nth-child(odd) { transform: rotate(-2deg); }
@@ -126,12 +126,14 @@
     font: inherit; font-size: 64px; width: 5.2em; text-align: center; letter-spacing: 12px; color: var(--ink);
     border: 4px solid var(--ink); border-radius: 12px; background: #fff; margin: 8px 0 12px; padding: 0 0 0 12px;
   }
+  #flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
   .hidden { display: none !important; }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <div class="ui">
+  <div id="flash"></div>
   <a id="home" class="drawn" href="../" aria-label="Back to games">&#8962;</a>
   <div id="hud" class="drawn hidden"></div>
   <div id="meter" class="drawn hidden"><i></i><i></i><i></i></div>
@@ -599,6 +601,67 @@ const PETS = {
     inside: { g: 'w', n: 'w', p: 'w' },
     back: {},
   },
+  Zeus: {
+    rows: [
+      'll........LL',
+      'llZZZZZZZZLL',
+      '.ZZZZZZZZZZ.',
+      '.ZgZZZZZkZZ.',
+      '.ZgZZZZkZZZ.',
+      '.ZZZZZZZkZZ.',
+      '.ZZZZnnZZZZ.',
+      'ppZZZZZZZZpp',
+      '.ppZZZZZZpp.',
+      '....ZZZZ....',
+      '....ZZZZ....',
+      '....Z..Z....',
+    ],
+    pal: { l: '#8fd3ec', L: '#2fb5b5', Z: '#e6a034', g: '#2a2228', k: '#2a2228', n: '#3a2a2a', p: '#f4a6c4' },
+    inside: { g: 'Z', k: 'Z', n: 'Z', p: 'Z' },
+    back: {},
+  },
+  Plufulous: {
+    rows: [
+      '...roYGlu...',
+      '...wwwwww...',
+      '...wwwwww...',
+      '.wwwwwwwwww.',
+      'wEEEEwwEEEEw',
+      'wEaaEEEEaaEw',
+      'wEEEEwwEEEEw',
+      'wwwwwnnwwwww',
+      'ppwwwwwwwwpp',
+      'pppwwwwwwppp',
+      '...wwwwww...',
+      '....wwww....',
+      '....w..w....',
+    ],
+    pal: { r: '#e53935', o: '#f08a24', Y: '#ffcf3f', G: '#5aa832', l: '#5aa9e6', u: '#7e4fd0',
+      w: '#f2f0ec', E: '#3a8fd8', a: '#6d6d78', n: '#3a2a2a', p: '#f4a6c4' },
+    inside: { E: 'w', a: 'w', n: 'w', p: 'w' },
+    back: {},
+  },
+  'Scarlet Ivy': {
+    rows: [
+      '..KKKKGGoG..',
+      '..KKKKGoGG..',
+      'KKKKKKGGoGGo',
+      '.wwwwwwwwww.',
+      '.wgwwwwwkww.',
+      '.wgwwwwkwww.',
+      '.wwwwwwwkww.',
+      '.wwwwnnwwww.',
+      'ppwwwrrwwwpp',
+      'pppwwwwwwppp',
+      '...wwwwww...',
+      '....wwww....',
+      '....w..w....',
+    ],
+    pal: { K: '#2a2228', G: '#5aa832', o: '#f08a24', w: '#f2f0ec', g: '#2a2228', k: '#4a4a52',
+      n: '#8a8a92', r: '#d32f2f', p: '#f4a6c4' },
+    inside: { g: 'w', k: 'w', n: 'w', r: 'w', p: 'w' },
+    back: {},
+  },
 };
 
 function buildPet(def, s = 0.09) {
@@ -753,12 +816,48 @@ function popcornParts() {
   return parts;
 }
 
+// A burger. The top bun stands up behind the pet as a seat back, or sits on
+// top when it's a snack.
+function burgerParts({ bun = '#d98c3e', patty = '#6b3a1e', cheese = '#ffcf3f', leaf = '#7cc443', seeds = '#fffbea', snack = false } = {}) {
+  const parts = [];
+  parts.push(place(paint(new THREE.CylinderGeometry(0.92, 0.82, 0.36, 16), bun), { p: [0, 0.52, 0], s: [1, 1, 1.3] }));
+  for (let n = 0; n < 14; n++) {                       // lettuce frill
+    const a = (n / 14) * Math.PI * 2;
+    parts.push(place(paint(sphere(7, 5), leaf), { p: [Math.sin(a) * 0.9, 0.74, Math.cos(a) * 1.17], s: [0.17, 0.08, 0.17] }));
+  }
+  parts.push(place(paint(new THREE.CylinderGeometry(0.98, 0.98, 0.22, 16), patty), { p: [0, 0.84, 0], s: [1, 1, 1.3] }));
+  parts.push(place(paint(box(), cheese), { p: [0, 0.98, 0], r: [0, Math.PI / 4, 0], s: [1.45, 0.06, 1.45] }));
+  const dome = new THREE.SphereGeometry(1, 24, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+  const sesame = (x, y, z) => (y > 0.3 && Math.abs(Math.floor(x * 12) * 7 + Math.floor(z * 12) * 13) % 9 === 0 ? seeds : bun);
+  if (snack) parts.push(place(paint(dome, sesame), { p: [0, 1.0, 0], s: [0.92, 0.5, 1.2] }));
+  else parts.push(place(paint(dome, sesame), { p: [0, 0.95, -1.05], r: [-Math.PI / 2 + 0.35, 0, 0], s: [0.7, 0.32, 0.42] }));
+  return parts;
+}
+
+// Rice buns, salmon for the patty, avocado for the cheese.
+const sushiBurgerParts = () => burgerParts({ bun: '#fffdf6', patty: '#ff8a4c', cheese: '#9ccc65', leaf: '#2f3b2a', seeds: '#8a8a92' });
+
+function makiParts() {
+  const parts = [];
+  parts.push(place(paint(new THREE.CylinderGeometry(1, 1, 0.95, 18), (x, y) => (y > 0.4 ? '#fffdf6' : '#2f3b2a')),
+    { p: [0, 0.8, 0], s: [0.8, 1, 1.2] }));                                  // nori and rice
+  parts.push(place(paint(new THREE.CircleGeometry(0.55, 14), '#ff8a4c'),
+    { p: [0, 1.29, 0], r: [-Math.PI / 2, 0, 0], s: [0.8, 1.2, 1] }));        // salmon middle
+  parts.push(place(paint(box(), '#7cc443'), { p: [0.3, 1.3, 0.45], s: [0.14, 0.04, 0.22] }));   // cucumber
+  for (const x of [-0.22, 0.22]) {                     // a blue bow on the back, for fashion
+    parts.push(place(paint(sphere(8, 6), '#3b7dd8'), { p: [x, 1.0, -1.2], s: [0.24, 0.16, 0.08] }));
+  }
+  parts.push(place(paint(sphere(6, 5), '#2c5fa8'), { p: [0, 1.0, -1.23], s: [0.09, 0.09, 0.09] }));
+  return parts;
+}
+
 function kartGeo(parts) {
   wheels(parts);
   return merge(parts);
 }
 
-// The five racers. `color` is "Fav color" from each card; powers use it.
+// The racers. `color` is "Fav color" from each card; powers use it. `food`
+// is the favorite (Zeus has two).
 const RACERS = [
   { name: 'Buddy', card: 'buddy', kart: 'Taco Kart', power: 'Gaming Knockout', food: 'taco',
     color: '#2a2228', parts: () => tacoParts(), petY: 0.78 },
@@ -770,6 +869,12 @@ const RACERS = [
     color: '#f08a24', parts: boatParts, petY: 0.62 },
   { name: 'Fluff Puff', card: 'fluff-puff', kart: 'Popcorn Bucket', power: 'Brave Mode', food: 'popcorn',
     color: '#ff7eb6', parts: popcornParts, petY: 1.02 },
+  { name: 'Zeus', card: 'zeus', kart: 'Sushi Burger', power: 'Math Defeater', food: ['sushi', 'burger'],
+    color: '#f5c400', parts: sushiBurgerParts, petY: 1.0 },
+  { name: 'Plufulous', card: 'plufulous', kart: 'Burger Kart', power: 'Instant Hacking', food: 'burger',
+    color: '#e0479e', parts: () => burgerParts(), petY: 1.0 },
+  { name: 'Scarlet Ivy', card: 'scarlet-ivy', kart: 'Maki Roll', power: 'Fashion Shoot', food: 'sushi',
+    color: '#3b7dd8', parts: makiParts, petY: 1.22 },
 ];
 
 function shadowMesh() {
@@ -1092,6 +1197,7 @@ const SNACK_GEO = {
   sushi: merge(shrink(nigiriParts(), 0.55, [0, 0.1, 0])),
   ramen: merge(shrink(ramenParts(), 0.45, [0, 0.15, 0])),
   popcorn: merge(shrink(popcornParts(), 0.42, [0, 0.1, 0])),
+  burger: merge(shrink(burgerParts({ snack: true }), 0.45, [0, 0.05, 0])),
 };
 const FOODS = Object.keys(SNACK_GEO);
 const snacks = [];
@@ -1167,6 +1273,13 @@ function cakeParts() {
 const cakeGeo = merge(cakeParts());
 const cakes = [];
 
+// Math Defeater's big plus sign.
+const plusGeo = merge([
+  place(paint(box(), '#f5c400'), { s: [1.1, 0.34, 0.34] }),
+  place(paint(box(), '#f5c400'), { s: [0.34, 1.1, 0.34] }),
+]);
+const pluses = [];
+
 let fxCount = 0;
 const newId = () => `${player.name}-${fxCount++}`;
 
@@ -1182,18 +1295,44 @@ function addCake(owner, id, x, z) {
   scene.add(m);
   cakes.push({ id, owner, m, life: 20 });
 }
+function addPlus(owner, id, f, lat, target) {
+  const m = mesh(plusGeo);
+  trackPoint(f, lat, m.position).setY(0.7);
+  scene.add(m);
+  pluses.push({ id, owner, m, life: 5, f, lat, target: racerNamed(target) || null, homing: false });
+}
+// Instant Hacking: pixels where the kart was and where it popped up.
+function hackFx(owner, from, to) {
+  for (let k = 0; k < 8; k++) {
+    puff(from.clone().setY(0.4 + Math.random() * 1.2), owner.color, 0.6);
+    puff(to.clone().setY(0.4 + Math.random() * 1.2), k % 2 ? owner.color : '#ffffff', 0.6);
+  }
+}
+// Fashion Shoot: a camera flash.
+function flashFx(owner) {
+  burstRing(owner);
+  for (let k = 0; k < 10; k++) puff(owner.pos.clone().setY(1 + Math.random()), k % 2 ? owner.color : '#ffffff', 0.5);
+}
+function screenFlash(a) {
+  const el = $('flash');
+  el.style.transition = 'none';
+  el.style.opacity = a;
+  void el.offsetWidth;
+  el.style.transition = 'opacity 0.7s';
+  el.style.opacity = 0;
+}
 function removeFx(list, k) {
   scene.remove(list[k].m);
   list.splice(k, 1);
 }
 function removeFxById(id) {
-  for (const list of [balls, cakes]) {
+  for (const list of [balls, cakes, pluses]) {
     const k = list.findIndex((o) => o.id === id);
     if (k >= 0) removeFx(list, k);
   }
 }
 function clearFx() {
-  for (const list of [balls, cakes, rings]) while (list.length) removeFx(list, 0);
+  for (const list of [balls, cakes, pluses, rings]) while (list.length) removeFx(list, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -1225,7 +1364,7 @@ function resetRace() {
   const humans = net.host ? [player, ...friends]
     : net.roster.length ? net.roster.map(([, pet]) => racerNamed(pet)) : [player];
   const order = [...rivals, ...humans];
-  const skills = [0.94, 0.92, 0.9, 0.88];
+  const skills = [0.94, 0.93, 0.92, 0.91, 0.9, 0.89, 0.88];
   order.forEach((r, k) => {
     const f = -6 - k * 5, lat = k % 2 ? 3 : -3;
     trackPoint(f, lat, r.pos);
@@ -1366,6 +1505,7 @@ function getHit(text) {
   if (player.spin > 0 || player.brave > 0) return;
   player.spin = 1.5;
   showPop(text);
+  if (text === 'Flash!') screenFlash(0.75);
   for (let k = 0; k < 5; k++) puff(player.pos.clone().setY(1.2), '#ffcf3f', 0.5);
 }
 
@@ -1430,11 +1570,23 @@ function updateSnacks(dt, t) {
 }
 
 function eat(food) {
-  player.meter = Math.min(3, player.meter + (food === player.food ? 2 : 1));
+  const favs = [].concat(player.food);
+  player.meter = Math.min(3, player.meter + (favs.includes(food) ? 2 : 1));
   if (player.name === 'Duffy') player.nibble = 0.6;     // Speed Eating: every bite helps
 }
 
-// --- the five powers -------------------------------------------------------
+// --- the powers ------------------------------------------------------------
+// The nearest kart ahead (in track points), within `reach` world units.
+function nextAhead(reach) {
+  const me = progressOf(player);
+  let best = null, gap = (reach / TL) * N;
+  for (const r of others()) {
+    const d = progressOf(r) - me;
+    if (d > 0 && d < gap) { gap = d; best = r; }
+  }
+  return best && { r: best, gap };
+}
+
 const POWERS = {
   'Gaming Knockout'() {
     burstRing(player);
@@ -1460,6 +1612,39 @@ const POWERS = {
     showPop('Cake!');
   },
   'Brave Mode'() { player.brave = 4; showPop('Brave!'); },
+  'Math Defeater'() {
+    const ahead = nextAhead(70);
+    const p = { id: newId(), f: player.idx + 3, lat: latOf(player.pos, player.idx), target: ahead ? ahead.r.name : '' };
+    addPlus(player, p.id, p.f, p.lat, p.target);
+    send({ t: 'fx', k: 'plus', o: player.name, ...p });
+    showPop('1 + 1 = 2!');
+  },
+  'Instant Hacking'() {
+    // Pop up just in front of the next kart, or a little way on if nobody's close.
+    const ahead = nextAhead(50), step = N / TL;
+    const to = progressOf(player) + (ahead ? ahead.gap + 5 * step : 25 * step);
+    const from = player.pos.clone();
+    const lat = THREE.MathUtils.clamp(latOf(player.pos, player.idx), -HALF + 1.5, HALF - 1.5);
+    player.lap = Math.floor(to / N) + 1;
+    player.idx = Math.floor(wrap(to));
+    trackPoint(to, lat, player.pos);
+    player.heading = headingAt(to);
+    hackFx(player, from, player.pos);
+    send({ t: 'fx', k: 'hack', o: player.name, x: from.x, z: from.z, x2: player.pos.x, z2: player.pos.z });
+    showPop('Hacked!');
+  },
+  'Fashion Shoot'() {
+    flashFx(player);
+    screenFlash(0.3);
+    send({ t: 'fx', k: 'flash', o: player.name });
+    const fwd = fwdOf(player);
+    let hit = 0;
+    for (const r of others()) {
+      const d = r.pos.clone().sub(player.pos).setY(0);
+      if (d.length() < 16 && d.dot(fwd) < 1 && spinOut(r, 'Flash!')) hit++;
+    }
+    if (!hit) showPop('Say cheese!');
+  },
 };
 
 function usePower() {
@@ -1528,6 +1713,33 @@ function updateEffects(dt, t) {
     if (eaten) send({ t: 'gone', id: c.id });
     if (eaten || c.life <= 0) removeFx(cakes, k);
   }
+  for (let k = pluses.length - 1; k >= 0; k--) {
+    const b = pluses[k], tg = b.target;
+    b.life -= dt;
+    const at = tg && tg.pos.clone().setY(0.7);
+    if (at && (b.homing || b.m.position.distanceTo(at) < 14)) {
+      b.homing = true;                                  // close: straight at it
+      const to = at.sub(b.m.position), len = to.length();
+      if (len > 0.01) b.m.position.addScaledVector(to, Math.min(1, (44 * dt) / len));
+    } else {                                            // far: follow the road
+      b.f += (44 * dt / TL) * N;
+      if (tg) b.lat += ((isHuman(tg) ? latOf(tg.pos, tg.idx) : tg.lat) - b.lat) * Math.min(1, dt * 2);
+      trackPoint(b.f, b.lat, b.m.position).setY(0.7);
+    }
+    b.m.rotation.y = t * 3;
+    b.m.rotation.z = t * 6;
+    let hit = false;
+    if (b.owner === player) {
+      for (const r of others()) {
+        if (r.pos.distanceTo(b.m.position.clone().setY(0)) < 1.8 && spinOut(r, 'Defeated!')) { hit = true; break; }
+      }
+    }
+    if (hit || b.life <= 0) {
+      if (hit) send({ t: 'gone', id: b.id });
+      puff(b.m.position.clone(), b.owner.color);
+      removeFx(pluses, k);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1537,6 +1749,7 @@ function updateEffects(dt, t) {
 // ---------------------------------------------------------------------------
 const ROOM_PREFIX = 'pet-racers-room-';
 const CODE_LETTERS = 'ABCDEFGHJKMNPQRSTUVWXYZ';    // no I, L or O
+const ROOM_SIZE = 5;                                 // iPads in one room
 const net = {
   peer: null, host: false, code: '', sent: 0,
   guests: [],                  // host: { conn, id, pet, heard, p } per joined iPad
@@ -1586,7 +1799,7 @@ function netError(e) {
   const msg = {
     'peer-unavailable': `There's no room called ${net.code}. Check the code and try again.`,
     busy: `That room is racing right now. Try again when they're back at the pick screen.`,
-    full: `That room is full. Every pet is taken!`,
+    full: `That room is full: it already has five iPads.`,
     network: "Couldn't reach the room server. Check the Wi-Fi and try again.",
   }[e.type] || (e.type === 'server-error' || e.type === 'socket-error'
     ? "Couldn't reach the room server. Check the Wi-Fi and try again."
@@ -1622,7 +1835,7 @@ function dropFriends(gone) {
 function acceptGuest(c) {
   const g = { conn: c, id: c.peer, pet: null, heard: performance.now(), p: null };
   c.on('open', () => {
-    const reason = state !== 'title' ? 'busy' : net.guests.length + 1 >= RACERS.length ? 'full' : null;
+    const reason = state !== 'title' ? 'busy' : net.guests.length + 1 >= ROOM_SIZE ? 'full' : null;
     if (reason) { c.send({ t: 'no', why: reason }); setTimeout(() => c.close(), 500); return; }
     net.guests.push(g);
   });
@@ -1747,6 +1960,9 @@ function showFx(m) {
   if (m.k === 'ring') burstRing(owner);
   if (m.k === 'ball') addBall(owner, m.id, m.f, m.lat, m.latVel);
   if (m.k === 'cake') addCake(owner, m.id, m.x, m.z);
+  if (m.k === 'plus') addPlus(owner, m.id, m.f, m.lat, m.target);
+  if (m.k === 'hack') hackFx(owner, new V3(m.x, 0, m.z), new V3(m.x2, 0, m.z2));
+  if (m.k === 'flash') flashFx(owner);
 }
 
 const myState = () => {
@@ -1946,7 +2162,7 @@ function backToPick() {
   updatePickUi();
 }
 
-const ORDINAL = ['', '1st', '2nd', '3rd', '4th', '5th'];
+const ORDINAL = ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'];
 function finish() {
   const place = placeOf(player);
   $('result').textContent = place === 1 ? 'You won!' : `${ORDINAL[place]} place!`;
@@ -1996,7 +2212,7 @@ window.autoUpdateIsIdle = () => (state === 'title' || state === 'done') && !net.
 
 // For testing from the console.
 window.petRacers = {
-  RACERS, TRACKS, chooseTrack, input, startRace, usePower, pick, placeOf, progressOf, cakes, balls, net, makeRoom, joinRoom, leaveRoom,
+  RACERS, TRACKS, chooseTrack, input, startRace, usePower, pick, placeOf, progressOf, cakes, balls, pluses, net, makeRoom, joinRoom, leaveRoom,
   get player() { return player; }, get friends() { return friends; }, get rivals() { return rivals; }, get state() { return state; },
 };
 
