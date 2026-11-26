@@ -18,9 +18,17 @@ The pick screen is where you see faces.
 ## Karts and the world
 
 Karts are simple shapes that read as the food: a taco shell full of lettuce, a bowl of
-ramen with chopsticks as a spoiler. The track is a neighborhood park: grey road with a
-dashed middle line, red and white curbs, hedges, round trees and pines, flowers,
-rolling hills, clouds.
+ramen with chopsticks as a spoiler.
+
+Each track is a place drawn from a pet's point of view:
+
+| Track | Road | Edges | Around it | Sky |
+|---|---|---|---|---|
+| Park | grey, dashed white line, red and white curbs | hedges | trees, pines, flowers, rocks, hills, clouds | blue pencil |
+| Backyard | dirt path, stone edging | white picket fence | sunflowers, a kiddie pool, a doghouse, garden beds, trees, two houses | blue pencil |
+| Kitchen | cutting-board tan, wooden line, yellow and white curbs | marshmallows | a giant mug, toaster, apples, oranges, jars, cookies on a tiled counter, cabinets all around | warm wall |
+
+The pets are tiny in the kitchen: the counter's things are many times their size.
 
 ## The drawn style
 

@@ -29,3 +29,17 @@ Things drawn on layer `LAYER_NO_EDGES` (the soft shadows) are skipped in pass 2.
   World-space triplanar mapping keeps the texture from swimming as the camera moves. The
   `uBoil` offset jumps it 8 times a second.
 - Pixel ratio is capped at 1.5 for the iPad. Line width scales with it.
+
+## Tracks
+
+`TRACKS` holds each track's control points and look. `setCurve` resamples a track into
+`N = 800` points, so all the per-step code (laps, steering help, snacks, rivals) works on
+any track. `buildTrack` makes one merged mesh per track the first time it's chosen;
+`loadTrack` hides the old one, shows the new one, sets the sky color and moves the snacks.
+
+A new track's control points need to keep every bend gentle and every pair of road
+sections apart. We check with a script before adding one: no two non-neighboring points
+closer than about 30 units (two road halves plus borders), and no more than about 25° of
+turn per 5 units. The kart steers about 20° in that distance at full speed, and the
+steering help and grass cover a little more. The Park peaks at 24°, the Backyard at 14°
+and the Kitchen at 18°.

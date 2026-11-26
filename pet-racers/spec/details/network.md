@@ -21,7 +21,8 @@ Cloudflare Worker) and pass its host to `new Peer()`.
 ## The roster
 
 The host owns the roster: `[peer id, pet]` per person, host first, then guests in join
-order. It sends `roster` whenever someone joins, picks or leaves. Guests take their own
+order, plus the track. It sends `roster` whenever someone joins, picks or leaves, or the
+track changes. `start` carries the track too. Guests take their own
 pet from it, so the host settles clashes by giving a clashing guest the first free pet.
 The grid uses roster order, so every iPad builds the same grid. A guest connecting
 mid-race or to a full room gets `no {why: busy | full}` and is closed.

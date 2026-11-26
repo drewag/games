@@ -1,6 +1,6 @@
 # How it plays
 
-Pet Racers is a kart racer: three laps of one track against four rivals, or against
+Pet Racers is a kart racer: three laps of a track against four rivals, or against
 friends on other iPads with rivals filling the remaining spots. The hard parts
 of the genre are taken away for a 9-year-old. The kart accelerates by itself, you can't
 fall off or get stuck, and nobody is far behind for long.
@@ -9,7 +9,8 @@ fall off or get stuck, and nobody is far behind for long.
 
 The title screen shows the five card scans in a row. Tapping a card picks that pet: it
 appears in its kart, slowly turning, with the kart's name and the power's name under it.
-**Race!** starts. The game remembers the last pet picked.
+Below the cards, **Park**, **Backyard** and **Kitchen** pick the track. **Race!** starts.
+The game remembers the last pet and track picked.
 
 ## Controls
 
@@ -29,8 +30,9 @@ Karts start on a staggered grid behind the start line, with your racer at the ba
 place (1st–5th). After the third lap, a card shows your place and time and offers
 **Race again!** or a different pet.
 
-- **Grass** beyond the red and white curbs slows the kart to about half speed.
-- **Hedges** line the track. Driving into them slides the kart back along the road and
+- **Off the road** (grass, or the kitchen counter) beyond the curbs slows the kart to
+  about half speed.
+- **Hedges, a fence or marshmallows** line the track. Driving into them slides the kart back along the road and
   costs some speed. It never stops the kart or turns it around.
 - **Karts bump** each other apart. Bumping never spins anyone out (Brave Mode aside).
 - **Catch-up**: rivals far ahead of you ease off, and rivals far behind speed up, so
@@ -64,7 +66,8 @@ together, and the host's pick screen keeps showing the room code so more can joi
 the pick screen takes new people: a room that's mid-race, or that has all five pets, turns
 joiners away with a message. Two people can't have the same pet. Taken cards say "Friend",
 and anyone who joins holding a taken pet gets the first free one. The host gets **Start!**
-and chooses **Race again!** or a new pick afterwards. Everyone else waits. **Leave** goes
+picks the track (other iPads follow it and can't change it), and chooses **Race again!** or
+a new pick afterwards. Everyone else waits. **Leave** goes
 back to racing alone.
 
 In a race with friends, the people start at the back of the grid in the order they joined,

@@ -1,7 +1,7 @@
 # Pet Racers
 
 A kart racer for Ruby (9) and Zachary (7). You pick one of the five pets from the
-character cards and race the other four around a neighborhood track. Each pet drives a kart
+character cards and race the other four around one of three tracks: a park, a backyard or a kitchen counter. Each pet drives a kart
 made from their favorite food and has one **power** taken from their card.
 
 It's the third game in this repo, after [Snack Attack](../snack-attack/) and

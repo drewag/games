@@ -83,6 +83,14 @@
   .pc.on { opacity: 1; transform: translateY(-14px) scale(1.08) rotate(0deg); border-width: 5px; }
   .pc img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
   #pickInfo { font-size: 24px; margin-bottom: 10px; }
+  #tracks { display: flex; justify-content: center; gap: 10px; margin: 2px 0 10px; }
+  #tracks button {
+    font: inherit; font-size: 22px; color: var(--ink); padding: 2px 18px; cursor: pointer;
+    background: var(--paper); border: 3px solid var(--ink); border-radius: 18px 6px 18px 6px / 6px 18px 6px 18px;
+    opacity: 0.6;
+  }
+  #tracks button.on { background: #ffe58a; opacity: 1; }
+  #tracks.locked button { pointer-events: none; }
   #pickName { font-size: 32px; font-weight: normal; margin-right: 8px; }
   #card {
     position: absolute; left: 50%; bottom: calc(34px + env(safe-area-inset-bottom)); transform: translateX(-50%);
@@ -139,6 +147,7 @@
   <div id="title" class="hidden">Pet Racers</div>
   <div id="pick" class="drawn hidden">
     <div id="cards"></div>
+    <div id="tracks"></div>
     <div id="pickInfo"><span id="pickName"></span><span id="pickKart"></span></div>
     <div id="netStatus" class="hidden"></div>
     <button id="go" class="drawn">Race!</button>
@@ -177,7 +186,6 @@ function rng(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-const rand = rng(12);
 
 // ---------------------------------------------------------------------------
 // Renderer and the hand-drawn look
@@ -343,6 +351,7 @@ const compMat = new THREE.ShaderMaterial({
     uLine: { value: 1.5 },
     uInk: { value: new THREE.Color(INK) },
     uPaper: { value: new THREE.Color(PAPER) },
+    uSky: { value: new THREE.Vector3(0.55, 0.74, 0.92) },
     uNear: { value: camera.near },
     uFar: { value: camera.far },
   },
@@ -351,7 +360,7 @@ const compMat = new THREE.ShaderMaterial({
     void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
   fragmentShader: /* glsl */`
     uniform sampler2D tColor, tEdge, tDepth, tPaper, tStrokes;
-    uniform vec2 uRes; uniform float uBoil, uLine, uNear, uFar; uniform vec3 uInk, uPaper;
+    uniform vec2 uRes; uniform float uBoil, uLine, uNear, uFar; uniform vec3 uInk, uPaper, uSky;
     varying vec2 vUv;
     float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float vnoise(vec2 p) {
@@ -384,9 +393,9 @@ const compMat = new THREE.ShaderMaterial({
       e *= 1.0 - 0.75 * smoothstep(110.0, 240.0, 1.0 / zC);         // lighter lines far away
 
       vec3 col = texture2D(tColor, vUv).rgb;
-      if (texture2D(tDepth, vUv).x > 0.9999999) {                    // sky: blue pencil scribbles
+      if (texture2D(tDepth, vUv).x > 0.9999999) {                    // sky: pencil scribbles
         float s = texture2D(tStrokes, fc / 700.0 + vec2(0.0, uBoil * 0.002)).r;
-        col = mix(uPaper, vec3(0.55, 0.74, 0.92), smoothstep(0.35, 1.0, vUv.y) * (0.25 + 0.6 * s));
+        col = mix(uPaper, uSky, smoothstep(0.35, 1.0, vUv.y) * (0.25 + 0.6 * s));
       }
       col = mix(col, uInk, clamp(e, 0.0, 1.0));
       col *= 0.93 + 0.07 * texture2D(tPaper, fc / 256.0).r;
@@ -790,19 +799,24 @@ for (const r of RACERS) {
 }
 
 // ---------------------------------------------------------------------------
-// Track
+// Tracks. Each is a closed loop through control points plus a look: road,
+// curbs, what lines the road, the ground, the scenery and the sky. A track is
+// built the first time it's picked and kept after that.
 // ---------------------------------------------------------------------------
-const CTRL = [[0, -90], [60, -95], [110, -60], [105, 0], [70, 30], [90, 80], [40, 110],
-  [-20, 90], [-50, 40], [-100, 50], [-120, 0], [-90, -60], [-50, -85]];
-const curve = new THREE.CatmullRomCurve3(CTRL.map(([x, z]) => new V3(x, 0, z)), true, 'centripetal');
-const N = 800;
-const TP = curve.getSpacedPoints(N); TP.pop();
-const TL = curve.getLength();
-const TT = TP.map((p, i) => TP[(i + 1) % N].clone().sub(TP[(i - 1 + N) % N]).normalize());
-const TR = TT.map((t) => new V3(-t.z, 0, t.x));            // to the driver's right
+const N = 800;           // samples around every track
 const HALF = 7;          // half the road width
-const WALL = HALF + 3.5; // where the hedges stop you
+const WALL = HALF + 3.5; // where the border stops you
 const wrap = (f) => ((f % N) + N) % N;
+let TP, TT, TR, TL;      // the current track's points, tangents, right vectors, length
+let track = null;
+
+function setCurve(ctrl) {
+  const curve = new THREE.CatmullRomCurve3(ctrl.map(([x, z]) => new V3(x, 0, z)), true, 'centripetal');
+  TP = curve.getSpacedPoints(N); TP.pop();
+  TL = curve.getLength();
+  TT = TP.map((p, i) => TP[(i + 1) % N].clone().sub(TP[(i - 1 + N) % N]).normalize());
+  TR = TT.map((t) => new V3(-t.z, 0, t.x));            // to the driver's right
+}
 
 function trackPoint(f, lat, out = new V3()) {
   f = wrap(f);
@@ -817,14 +831,179 @@ function headingAt(f) {
   return Math.atan2(t.x, t.z);
 }
 
-function buildTrack() {
+// Is p within `d` of the road's centre line anywhere?
+function nearTrack(p, d) {
+  const d2 = d * d;
+  for (let i = 0; i < N; i += 2) {
+    const dx = TP[i].x - p.x, dz = TP[i].z - p.z;
+    if (dx * dx + dz * dz < d2) return true;
+  }
+  return false;
+}
+
+// --- scenery pieces ----------------------------------------------------------
+const pick1 = (r, list) => list[Math.floor(r() * list.length)];
+
+function tree(parts, r, x, z) {
+  const h = 2 + r() * 1.5, s = 2 + r() * 1.4;
+  parts.push(place(paint(new THREE.CylinderGeometry(0.35, 0.5, h, 7), '#8a5a33'), { p: [x, h / 2, z] }));
+  parts.push(place(paint(sphere(9, 7), pick1(r, ['#3f8f3a', '#56a83f', '#6dbb4a'])),
+    { p: [x, h + s * 0.7, z], s: [s, s * 0.9, s] }));
+}
+function pine(parts, r, x, z) {
+  const h = 5 + r() * 3;
+  parts.push(place(paint(new THREE.CylinderGeometry(0.3, 0.4, 1.4, 6), '#7a4a2a'), { p: [x, 0.7, z] }));
+  for (let k = 0; k < 3; k++) {
+    parts.push(place(paint(new THREE.ConeGeometry(2.1 - k * 0.5, h * 0.45, 9), '#2f7a4a'),
+      { p: [x, 1.4 + k * h * 0.22 + h * 0.2, z] }));
+  }
+}
+function flowers(parts, r, x, z) {
+  const c = pick1(r, ['#ff7eb6', '#ffcf3f', '#ffffff', '#a58ad8', '#e2483b']);
+  for (let k = 0; k < 4; k++) {
+    const fx = x + (r() - 0.5) * 3, fz = z + (r() - 0.5) * 3;
+    parts.push(place(paint(new THREE.CylinderGeometry(0.05, 0.05, 0.6, 4), '#3f8f3a'), { p: [fx, 0.3, fz] }));
+    parts.push(place(paint(sphere(6, 4), c), { p: [fx, 0.7, fz], s: [0.3, 0.2, 0.3] }));
+  }
+}
+function rock(parts, r, x, z) {
+  const s = 0.8 + r() * 1.6;
+  parts.push(place(paint(sphere(7, 5), '#b4aca0'), { p: [x, s * 0.3, z], r: [0, r() * 3, 0], s: [s * 1.3, s * 0.8, s] }));
+}
+function sunflower(parts, r, x, z) {
+  const h = 3 + r() * 2;
+  parts.push(place(paint(new THREE.CylinderGeometry(0.12, 0.15, h, 6), '#4f9a3a'), { p: [x, h / 2, z] }));
+  parts.push(place(paint(sphere(6, 4), '#5aa844'), { p: [x + 0.4, h * 0.5, z], s: [0.5, 0.15, 0.3] }));
+  parts.push(place(paint(new THREE.CylinderGeometry(1, 1, 0.15, 12), '#ffcf3f'), { p: [x, h, z], r: [1.2, r() * 6, 0] }));
+  parts.push(place(paint(new THREE.CylinderGeometry(0.5, 0.5, 0.25, 10), '#6b3a1e'), { p: [x, h, z], r: [1.2, 0, 0] }));
+}
+function pool(parts, r, x, z) {
+  parts.push(place(paint(new THREE.CylinderGeometry(4, 4, 0.8, 18), '#ff7eb6'), { p: [x, 0.4, z] }));
+  parts.push(place(paint(new THREE.CylinderGeometry(3.6, 3.6, 0.1, 18), '#7ec8e3'), { p: [x, 0.82, z] }));
+  parts.push(place(paint(sphere(8, 6), (bx, by, bz) => (bx > 0 ? '#e2483b' : '#fffdf6')), { p: [x + 1.5, 1.1, z], s: [0.6, 0.6, 0.6] }));
+}
+function doghouse(parts, r, x, z) {
+  const a = r() * 6;
+  parts.push(place(paint(box(), '#e2483b'), { p: [x, 1.5, z], r: [0, a, 0], s: [4, 3, 5] }));
+  parts.push(place(paint(new THREE.CylinderGeometry(3.2, 3.2, 5.4, 3), '#6b3a1e'), { p: [x, 3.6, z], r: [Math.PI / 2, a, Math.PI / 2], s: [1, 1, 0.55] }));
+  parts.push(place(paint(sphere(8, 6), '#2a2228'), { p: [x + Math.sin(a) * 2.5, 1.1, z + Math.cos(a) * 2.5], r: [0, a, 0], s: [1.2, 1.4, 0.2] }));
+}
+function gardenBed(parts, r, x, z) {
+  const a = r() * 6;
+  parts.push(place(paint(box(), '#8a5a33'), { p: [x, 0.4, z], r: [0, a, 0], s: [8, 0.8, 3] }));
+  for (let k = 0; k < 5; k++) {
+    const d = (k - 2) * 1.5;
+    parts.push(place(paint(sphere(7, 5), k % 2 ? '#e2483b' : '#4f9a3a'),
+      { p: [x + Math.cos(a) * d, 1.2, z - Math.sin(a) * d], s: [0.7, 0.6, 0.7] }));
+  }
+}
+function house(parts, x, z, a) {
+  parts.push(place(paint(box(), '#f6e3b4'), { p: [x, 12, z], r: [0, a, 0], s: [60, 24, 30] }));
+  parts.push(place(paint(new THREE.CylinderGeometry(22, 22, 62, 3), '#b5482f'), { p: [x, 30, z], r: [Math.PI / 2, a, Math.PI / 2], s: [1, 1, 0.75] }));
+  for (const d of [-18, 0, 18]) {
+    parts.push(place(paint(box(), '#7ec8e3'), { p: [x + Math.cos(a) * d, 14, z - Math.sin(a) * d], r: [0, a, 0], s: [7, 7, 30.4] }));
+  }
+}
+function mug(parts, r, x, z) {
+  const c = pick1(r, ['#e2483b', '#7ec8e3', '#ffcf3f', '#ff7eb6']);
+  parts.push(place(paint(new THREE.CylinderGeometry(4, 4, 9, 18), c), { p: [x, 4.5, z] }));
+  parts.push(place(paint(new THREE.CylinderGeometry(3.5, 3.5, 0.2, 18), '#6b3a1e'), { p: [x, 8.6, z] }));     // cocoa
+  parts.push(place(paint(new THREE.TorusGeometry(2.2, 0.6, 6, 14), c), { p: [x + 4.3, 4.5, z], r: [0, 0, 0] }));
+}
+function toaster(parts, r, x, z) {
+  const a = r() * 6;
+  parts.push(place(paint(sphere(12, 8), '#c9c3b8'), { p: [x, 4, z], r: [0, a, 0], s: [7, 5, 4] }));
+  parts.push(place(paint(box(), '#4a4a52'), { p: [x, 8.2, z], r: [0, a, 0], s: [5, 0.4, 0.8] }));
+  parts.push(place(paint(box(), '#d9a066'), { p: [x, 9, z], r: [0, a, 0], s: [4, 2, 0.6] }));          // toast
+}
+function fruit(parts, r, x, z) {
+  const kind = r();
+  if (kind < 0.5) {                                                                                     // apple
+    parts.push(place(paint(sphere(12, 8), '#e53935'), { p: [x, 3, z], s: [3.2, 3, 3.2] }));
+    parts.push(place(paint(new THREE.CylinderGeometry(0.2, 0.2, 1.5, 5), '#6b3a1e'), { p: [x, 6.3, z] }));
+    parts.push(place(paint(sphere(6, 4), '#5aa844'), { p: [x + 0.9, 6.4, z], s: [1, 0.25, 0.6] }));
+  } else {                                                                                              // orange
+    parts.push(place(paint(sphere(12, 8), '#f08a24'), { p: [x, 3, z], s: [3.2, 3.1, 3.2] }));
+    parts.push(place(paint(sphere(6, 4), '#5aa844'), { p: [x, 6.1, z], s: [0.6, 0.3, 0.6] }));
+  }
+}
+function jar(parts, r, x, z) {
+  const h = 6 + r() * 5;
+  parts.push(place(paint(new THREE.CylinderGeometry(2.6, 2.6, h, 14), pick1(r, ['#cfe8f3', '#ffe9a8', '#ffd6e5'])), { p: [x, h / 2, z] }));
+  parts.push(place(paint(new THREE.CylinderGeometry(2.8, 2.8, 1, 14), pick1(r, ['#e2483b', '#7e4fd0', '#3fae4a'])), { p: [x, h + 0.5, z] }));
+}
+function cookie(parts, r, x, z) {
+  parts.push(place(paint(new THREE.CylinderGeometry(2.4, 2.4, 0.6, 14), '#d9a066'), { p: [x, 0.3, z] }));
+  for (let k = 0; k < 5; k++) {
+    parts.push(place(paint(box(), '#6b3a1e'), { p: [x + (r() - 0.5) * 3, 0.65, z + (r() - 0.5) * 3], s: [0.4, 0.2, 0.4] }));
+  }
+}
+function cabinets(parts, x, z, a) {
+  parts.push(place(paint(box(), '#e9c27a'), { p: [x, 30, z], r: [0, a, 0], s: [70, 60, 8] }));
+  for (const d of [-22, 0, 22]) {
+    parts.push(place(paint(box(), '#d9a066'), { p: [x + Math.cos(a) * d, 30, z - Math.sin(a) * d], r: [0, a, 0], s: [18, 50, 8.6] }));
+  }
+}
+
+// What lines each side of the road, one piece every few steps.
+const BORDERS = {
+  hedge: (parts, r, p) => {
+    const s = 1.1 + r() * 0.5;
+    parts.push(place(paint(sphere(8, 6), r() < 0.5 ? '#4f9a3a' : '#5aa844'), { p: [p.x, 0.35, p.z], s: [s * 1.5, s * 0.75, s * 1.5] }));
+  },
+  fence: (parts, r, p, i) => {
+    const a = headingAt(i);
+    parts.push(place(paint(box(), '#fffdf6'), { p: [p.x, 1.2, p.z], r: [0, a, 0], s: [0.5, 2.4, 0.9] }));
+    parts.push(place(paint(new THREE.ConeGeometry(0.62, 0.6, 4), '#fffdf6'), { p: [p.x, 2.7, p.z], r: [0, a + Math.PI / 4, 0] }));
+  },
+  marshmallow: (parts, r, p, i) => {
+    parts.push(place(paint(new THREE.CylinderGeometry(0.9, 0.9, 1.6, 12), Math.floor(i / 3) % 2 ? '#ffd6e5' : '#fffdf6'),
+      { p: [p.x, 0.8, p.z], r: [0, r(), 0] }));
+  },
+};
+
+const TRACKS = [
+  {
+    name: 'Park',
+    ctrl: [[0, -90], [60, -95], [110, -60], [105, 0], [70, 30], [90, 80], [40, 110],
+      [-20, 90], [-50, 40], [-100, 50], [-120, 0], [-90, -60], [-50, -85]],
+    road: '#c8c0b4', line: '#fffdf6', curbs: ['#e2483b', '#fffdf6'], border: 'hedge', borderStep: 3,
+    ground: (x, y) => (Math.sin(x * 0.05) * Math.cos(y * 0.043) + Math.sin(x * 0.11 + y * 0.07) * 0.5 > 0.6 ? '#9ccf55' : '#8cc34a'),
+    sky: [0.55, 0.74, 0.92], hills: ['#a7d672', '#93c95f'], clouds: true,
+    props: [[0.4, tree], [0.22, pine], [0.26, flowers], [0.12, rock]], count: 260,
+  },
+  {
+    name: 'Backyard',
+    ctrl: [[0, -95], [80, -100], [130, -55], [115, 5], [135, 65], [85, 115], [10, 110], [-30, 70],
+      [-65, 25], [-115, 5], [-130, -50], [-75, -95]],
+    road: '#c9a274', line: null, curbs: ['#9a9088', '#b4aca0'], border: 'fence', borderStep: 2,
+    ground: (x, y) => (Math.floor(x / 9) + Math.floor(y / 9)) % 2 ? '#8cc34a' : '#97cb52',   // mowed stripes
+    sky: [0.55, 0.74, 0.92], hills: ['#a7d672', '#93c95f'], clouds: true,
+    props: [[0.22, tree], [0.22, sunflower], [0.2, flowers], [0.06, pool], [0.06, doghouse], [0.14, gardenBed], [0.1, rock]],
+    count: 200,
+    extra: (parts) => { house(parts, 0, -235, 0); house(parts, 230, 40, Math.PI / 2); },
+  },
+  {
+    name: 'Kitchen',
+    ctrl: [[-100, -80], [10, -95], [105, -85], [145, -35], [120, 20], [135, 75], [75, 115], [-20, 100],
+      [-55, 50], [-120, 40], [-140, -25]],
+    road: '#e6d3b3', line: '#c98a4b', curbs: ['#ffcf3f', '#fffdf6'], border: 'marshmallow', borderStep: 2,
+    ground: (x, y) => (Math.floor(x / 10) + Math.floor(y / 10)) % 2 ? '#fffdf6' : '#b9d9ee',  // tiles
+    sky: [0.96, 0.85, 0.62], hills: null, clouds: false,
+    props: [[0.22, mug], [0.14, toaster], [0.3, fruit], [0.18, jar], [0.16, cookie]], count: 90,
+    extra: (parts) => {
+      for (let k = 0; k < 12; k++) {
+        const a = (k / 12) * Math.PI * 2;
+        cabinets(parts, Math.sin(a) * 250, Math.cos(a) * 250, a);
+      }
+    },
+  },
+];
+
+function buildTrack(def) {
   const parts = [];
-  // grass, with gentle patches of color
-  const ground = paint(new THREE.PlaneGeometry(700, 700, 70, 70), (x, y) => {
-    const v = Math.sin(x * 0.05) * Math.cos(y * 0.043) + Math.sin(x * 0.11 + y * 0.07) * 0.5;
-    return v > 0.6 ? '#9ccf55' : '#8cc34a';
-  });
-  parts.push(place(ground, { r: [-Math.PI / 2, 0, 0] }));
+  const r = rng(def.name.length * 97 + 12);
+  parts.push(place(paint(new THREE.PlaneGeometry(700, 700, 70, 70), def.ground), { r: [-Math.PI / 2, 0, 0] }));
 
   // road and curbs, one quad per step so stripes stay crisp
   const P = [], C = [], col = new THREE.Color();
@@ -839,9 +1018,9 @@ function buildTrack() {
       const [a0, a1] = at(l0), [b0, b1] = at(l1);
       quad(a0, b0, b1, a1, color, y);
     };
-    strip(-HALF, HALF, '#c8c0b4');
-    if (Math.floor(i / 4) % 2 === 0) strip(-0.25, 0.25, '#fffdf6', 0.04);
-    const stripe = Math.floor(i / 3) % 2 ? '#e2483b' : '#fffdf6';
+    strip(-HALF, HALF, def.road);
+    if (def.line && Math.floor(i / 4) % 2 === 0) strip(-0.25, 0.25, def.line, 0.04);
+    const stripe = def.curbs[Math.floor(i / 3) % 2];
     strip(-HALF - 1.2, -HALF, stripe, 0.05);
     strip(HALF, HALF + 1.2, stripe, 0.05);
     if (i < 3) {                                           // checkered start line
@@ -854,14 +1033,12 @@ function buildTrack() {
   road.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
   parts.push(road);
 
-  // hedges along both sides
-  for (let i = 0; i < N; i += 3) {
+  // the border along both sides
+  for (let i = 0; i < N; i += def.borderStep) {
     for (const side of [-1, 1]) {
       const p = trackPoint(i, side * (WALL + 2.4));
       if (nearTrack(p, WALL - 0.5)) continue;     // don't poke into another part of the road
-      const s = 1.1 + rand() * 0.5;
-      parts.push(place(paint(sphere(8, 6), rand() < 0.5 ? '#4f9a3a' : '#5aa844'),
-        { p: [p.x, 0.35, p.z], s: [s * 1.5, s * 0.75, s * 1.5] }));
+      BORDERS[def.border](parts, r, p, i);
     }
   }
 
@@ -875,65 +1052,37 @@ function buildTrack() {
   parts.push(place(paint(box(), (x, y, z) => ((Math.floor((z + 0.5) * 12) + (y > 0 ? 1 : 0)) % 2 ? '#2a2228' : '#fffdf6')),
     { p: [s0.x, 7.2, s0.z], r: [0, ang, 0], s: [0.4, 1.4, 2 * HALF + 5] }));
 
-  // scenery: round trees, pine trees, flowers, rocks, far hills, clouds
+  // scenery, kept clear of the road
   let placed = 0;
-  while (placed < 260) {
-    const x = (rand() - 0.5) * 460, z = (rand() - 0.5) * 460;
-    const p = new V3(x, 0, z);
-    if (nearTrack(p, WALL + 6)) continue;
+  while (placed < def.count) {
+    const x = (r() - 0.5) * 460, z = (r() - 0.5) * 460;
+    if (nearTrack(new V3(x, 0, z), WALL + 8)) continue;
     placed++;
-    const kind = rand();
-    if (kind < 0.4) {
-      const h = 2 + rand() * 1.5, s = 2 + rand() * 1.4;
-      parts.push(place(paint(new THREE.CylinderGeometry(0.35, 0.5, h, 7), '#8a5a33'), { p: [x, h / 2, z] }));
-      parts.push(place(paint(sphere(9, 7), ['#3f8f3a', '#56a83f', '#6dbb4a'][Math.floor(rand() * 3)]),
-        { p: [x, h + s * 0.7, z], s: [s, s * 0.9, s] }));
-    } else if (kind < 0.62) {
-      const h = 5 + rand() * 3;
-      parts.push(place(paint(new THREE.CylinderGeometry(0.3, 0.4, 1.4, 6), '#7a4a2a'), { p: [x, 0.7, z] }));
-      for (let k = 0; k < 3; k++) {
-        parts.push(place(paint(new THREE.ConeGeometry(2.1 - k * 0.5, h * 0.45, 9), '#2f7a4a'),
-          { p: [x, 1.4 + k * h * 0.22 + h * 0.2, z] }));
-      }
-    } else if (kind < 0.88) {
-      const c = ['#ff7eb6', '#ffcf3f', '#ffffff', '#a58ad8', '#e2483b'][Math.floor(rand() * 5)];
+    let k = r();
+    for (const [w, fn] of def.props) {
+      if ((k -= w) < 0) { fn(parts, r, x, z); break; }
+    }
+  }
+  if (def.hills) {
+    for (let n = 0; n < 22; n++) {
+      const a = (n / 22) * Math.PI * 2 + r() * 0.2, d = 230 + r() * 40, s = 40 + r() * 40;
+      parts.push(place(paint(sphere(12, 8), def.hills[n % 2]),
+        { p: [Math.cos(a) * d, -s * 0.35, Math.sin(a) * d], s: [s * 1.6, s, s * 1.6] }));
+    }
+  }
+  if (def.clouds) {
+    for (let n = 0; n < 14; n++) {
+      const a = r() * Math.PI * 2, d = 120 + r() * 120, y = 45 + r() * 30;
       for (let k = 0; k < 4; k++) {
-        const fx = x + (rand() - 0.5) * 3, fz = z + (rand() - 0.5) * 3;
-        parts.push(place(paint(new THREE.CylinderGeometry(0.05, 0.05, 0.6, 4), '#3f8f3a'), { p: [fx, 0.3, fz] }));
-        parts.push(place(paint(sphere(6, 4), c), { p: [fx, 0.7, fz], s: [0.3, 0.2, 0.3] }));
+        const s = 5 + r() * 5;
+        parts.push(place(paint(sphere(9, 6), '#ffffff'),
+          { p: [Math.cos(a) * d + k * 6, y + r() * 2, Math.sin(a) * d + r() * 4], s: [s * 1.3, s * 0.7, s] }));
       }
-    } else {
-      const s = 0.8 + rand() * 1.6;
-      parts.push(place(paint(sphere(7, 5), '#b4aca0'), { p: [x, s * 0.3, z], r: [0, rand() * 3, 0], s: [s * 1.3, s * 0.8, s] }));
     }
   }
-  for (let n = 0; n < 22; n++) {
-    const a = (n / 22) * Math.PI * 2 + rand() * 0.2, r = 230 + rand() * 40, s = 40 + rand() * 40;
-    parts.push(place(paint(sphere(12, 8), n % 2 ? '#a7d672' : '#93c95f'),
-      { p: [Math.cos(a) * r, -s * 0.35, Math.sin(a) * r], s: [s * 1.6, s, s * 1.6] }));
-  }
-  for (let n = 0; n < 14; n++) {
-    const a = rand() * Math.PI * 2, r = 120 + rand() * 120, y = 45 + rand() * 30;
-    for (let k = 0; k < 4; k++) {
-      const s = 5 + rand() * 5;
-      parts.push(place(paint(sphere(9, 6), '#ffffff'),
-        { p: [Math.cos(a) * r + k * 6, y + rand() * 2, Math.sin(a) * r + rand() * 4], s: [s * 1.3, s * 0.7, s] }));
-    }
-  }
-  scene.add(mesh(merge(parts)));
+  if (def.extra) def.extra(parts);
+  return mesh(merge(parts));
 }
-
-// Is p within `d` of the road's centre line anywhere?
-function nearTrack(p, d) {
-  const d2 = d * d;
-  for (let i = 0; i < N; i += 2) {
-    const dx = TP[i].x - p.x, dz = TP[i].z - p.z;
-    if (dx * dx + dz * dz < d2) return true;
-  }
-  return false;
-}
-
-buildTrack();
 
 // ---------------------------------------------------------------------------
 // Snacks: rows of mixed food across the road.
@@ -952,12 +1101,24 @@ const snacks = [];
     for (const lat of [-4, 0, 4]) {
       const food = FOODS[Math.floor(r() * FOODS.length)];
       const m = mesh(SNACK_GEO[food]);
-      trackPoint(60 + k * (N / 8) + lat * 2, lat, m.position);
       scene.add(m);
-      snacks.push({ m, food, base: m.position.clone(), gone: 0 });
+      snacks.push({ m, food, f: 60 + k * (N / 8) + lat * 2, lat, base: new V3(), gone: 0 });
     }
   }
 }
+
+// Switch tracks: the road, everything around it, the sky and the snacks.
+function loadTrack(def) {
+  if (track === def) return;
+  if (track) track.mesh.visible = false;
+  track = def;
+  setCurve(def.ctrl);
+  if (!def.mesh) { def.mesh = buildTrack(def); scene.add(def.mesh); }
+  def.mesh.visible = true;
+  compMat.uniforms.uSky.value.set(...def.sky);
+  for (const p of snacks) { trackPoint(p.f, p.lat, p.base); p.m.position.copy(p.base); }
+}
+loadTrack(TRACKS[0]);
 
 // ---------------------------------------------------------------------------
 // Power effects. Each one has an `owner`; only the owner's iPad decides what
@@ -1503,7 +1664,7 @@ function updateRoster() {
   friends = net.guests.filter((g) => g.pet).map((g) => racerNamed(g.pet));
   dropFriends(before.filter((r) => !friends.includes(r)));
   rivals = RACERS.filter((r) => !isHuman(r));
-  send({ t: 'roster', list: [[net.peer.id, player.name], ...net.guests.filter((g) => g.pet).map((g) => [g.id, g.pet])] });
+  send({ t: 'roster', track: track.name, list: [[net.peer.id, player.name], ...net.guests.filter((g) => g.pet).map((g) => [g.id, g.pet])] });
   if (state === 'title') resetRace();
   updatePickUi();
 }
@@ -1525,6 +1686,7 @@ function onHostMessage(m) {
     case 'roster': {
       const first = !net.roster.length;
       net.roster = m.list;
+      loadTrack(TRACKS.find((d) => d.name === m.track) || track);
       const mine = m.list.find(([id]) => id === net.peer.id);
       if (mine && mine[1] !== player.name) setPlayer(racerNamed(mine[1]));
       const before = friends;
@@ -1536,7 +1698,7 @@ function onHostMessage(m) {
       break;
     }
     case 'no': netError({ type: m.why }); break;
-    case 'start': startRace(); break;
+    case 'start': loadTrack(TRACKS.find((d) => d.name === m.track) || track); startRace(); break;
     case 'lobby': backToPick(); break;
     case 's':
       for (const [pet, ...p] of m.all) {
@@ -1689,12 +1851,32 @@ for (const r of RACERS) {
   $('cards').append(b);
 }
 
+const TRACK_KEY = 'pet-racers-track';
+for (const def of TRACKS) {
+  const b = document.createElement('button');
+  b.textContent = def.name;
+  b.dataset.name = def.name;
+  b.addEventListener('click', () => chooseTrack(def));
+  $('tracks').append(b);
+}
+// Only the host picks the track in a room.
+function chooseTrack(def) {
+  if (isGuest() || !def) return;
+  loadTrack(def);
+  try { localStorage.setItem(TRACK_KEY, def.name); } catch (e) { /* private mode */ }
+  resetRace();
+  if (net.host) updateRoster();
+  updatePickUi();
+}
+
 function updatePickUi() {
   const room = inRoom(), guest = isGuest(), n = friends.length;
   for (const el of $('cards').children) {
     el.classList.toggle('on', el.dataset.name === player.name);
     el.classList.toggle('taken', friends.some((r) => r.name === el.dataset.name));
   }
+  for (const el of $('tracks').children) el.classList.toggle('on', el.dataset.name === track.name);
+  $('tracks').classList.toggle('locked', guest);
   $('go').textContent = n ? 'Start!' : 'Race!';
   $('go').classList.toggle('hidden', guest);
   $('friendBtn').textContent = room ? 'Leave' : 'Race a friend';
@@ -1747,7 +1929,7 @@ $('net').addEventListener('click', (e) => {
 });
 
 function startRace() {
-  if (net.host) send({ t: 'start' });
+  if (net.host) send({ t: 'start', track: track.name });
   showNet(null);
   resetRace();
   const fwd = fwdOf(player);
@@ -1814,13 +1996,15 @@ window.autoUpdateIsIdle = () => (state === 'title' || state === 'done') && !net.
 
 // For testing from the console.
 window.petRacers = {
-  RACERS, input, startRace, usePower, pick, placeOf, progressOf, cakes, balls, net, makeRoom, joinRoom, leaveRoom,
+  RACERS, TRACKS, chooseTrack, input, startRace, usePower, pick, placeOf, progressOf, cakes, balls, net, makeRoom, joinRoom, leaveRoom,
   get player() { return player; }, get friends() { return friends; }, get rivals() { return rivals; }, get state() { return state; },
 };
 
 let saved = null;
 try { saved = localStorage.getItem(PICK_KEY); } catch (e) { /* private mode */ }
 pick(RACERS.find((r) => r.name === saved) || RACERS[0]);
+try { saved = localStorage.getItem(TRACK_KEY); } catch (e) { saved = null; }
+chooseTrack(TRACKS.find((d) => d.name === saved) || TRACKS[0]);
 setState('title');
 
 let last = performance.now();

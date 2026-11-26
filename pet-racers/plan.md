@@ -15,6 +15,7 @@ match it.
 - [x] Pick screen with the card scans; remember the last pet
 - [x] Listed on the games home page and in the root README
 - [x] Racing friends: up to five iPads in a room through the host, powers hit friends
+- [x] Backyard and Kitchen tracks, picked on the pick screen (by the host in a room)
 
 ## Next
 
@@ -23,6 +24,6 @@ match it.
 
 ## Later
 
-- [ ] More tracks: backyard, kitchen counter, bakery
+- [ ] More tracks (a bakery?)
 - [ ] Sound
 - [ ] Our own signaling server (Cloudflare Worker) if PeerJS's public one is unreliable
