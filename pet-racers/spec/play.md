@@ -3,14 +3,16 @@
 Pet Racers is a kart racer: three laps of a track against seven rivals, or against
 friends on other iPads with rivals filling the remaining spots. The hard parts
 of the genre are taken away for a 9-year-old. The kart accelerates by itself, you can't
-fall off or get stuck, and nobody is far behind for long.
+fall off or get stuck, and nobody is far behind for long. **Pro driving** puts some back
+for whoever wants them: gas, hopping and drifting, as in Mario Kart.
 
 ## Picking a pet
 
 The title screen shows the eight card scans in a row. Tapping a card picks that pet: it
 appears in its kart, slowly turning, with the kart's name and the power's name under it.
-Below the cards, **Park**, **Backyard** and **Kitchen** pick the track. **Race!** starts.
-The game remembers the last pet and track picked.
+Below the cards, **Park**, **Backyard** and **Kitchen** pick the track, and **Easy driving**
+or **Pro: hop & drift** picks the controls. **Race!** starts. The game remembers the last
+pet, track and controls picked. Each iPad picks its own controls, even in a room.
 
 ## Controls
 
@@ -22,6 +24,31 @@ The game is played in landscape on an iPad. On-screen buttons sit under the thum
 
 With neither steering button held, the kart eases toward the road ahead on its own. That
 makes steering a correction, not a constant job. Arrow keys and space work on a computer.
+
+### Pro driving
+
+Pro driving copies Mario Kart's controls. There's no steering help, and the kart only
+goes while you hold the gas. Three more buttons sit bottom-right, with Power moved up
+above them:
+
+- **Go**, held to drive. Let go and the kart coasts to a stop.
+- **Back** brakes, then reverses slowly.
+- **Hop** makes the kart hop. It also counts as Go while held.
+
+A thumb can slide between buttons without lifting, from Go onto Hop for example. On a
+computer: up arrow or W for Go, down arrow or S for Back, Shift or X for Hop.
+
+**Drifting**: hop, and land still holding Hop while steering. The kart **drifts** that
+way, sliding with its nose turned in, until Hop is let go. Steering into the drift
+tightens it; steering away widens it. Drifting builds **sparks** at the back wheels:
+blue, then orange, then purple, faster when steering into the drift. Letting go of Hop
+with sparks showing gives a **boost**: short for blue, longer for orange, longest for
+purple. A boost ignores the slowdown off the road. Getting spun out or slowing right down
+ends a drift with no boost.
+
+**Rocket start**: press Go while the countdown shows 2 and keep holding it, and the kart
+boosts off the line. Holding Go from 3 stalls the kart for a second ("Too soon!").
+After the finish line the kart drives itself, as in Easy.
 
 ## A race
 

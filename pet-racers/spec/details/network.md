@@ -30,7 +30,7 @@ mid-race or to a full room gets `no {why: busy | full}` and is closed.
 ## Who decides what
 
 - **Each iPad drives its own racer.** Guests send `s {p}` about 15 times a second:
-  position, heading, speed, steer, lap, track index, spin, brave, rush. The host sends
+  position, heading, speed, steer, lap, track index, spin, brave, rush, then drift direction, spark level, hop height and boost (for Pro driving; older iPads ignore them). The host sends
   `s {all, rv}` to everyone: every person's latest `p` (its own included) and the rivals
   (track distance, lane, speed, spin). Each iPad moves friends' karts toward their
   reported position, nudged forward by their speed, and snaps if it's more than 12 units

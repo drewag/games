@@ -18,10 +18,12 @@ match it.
 - [x] Zeus, Plufulous and Scarlet Ivy: models, karts (Sushi Burger, Burger Kart, Maki Roll),
   powers (Math Defeater, Instant Hacking, Fashion Shoot), burger snacks, eight on the grid
 - [x] Backyard and Kitchen tracks, picked on the pick screen (by the host in a room)
+- [x] Pro driving: Go/Back/Hop, drifting with blue, orange and purple boosts, rocket start
 
 ## Next
 
 - [ ] Play it on the iPad and tune speeds and frame rate
+- [ ] Try Pro driving on the iPad: button layout, drift tightness, spark times, boost size
 - [ ] Race with three or more real iPads: check smoothness and Wi-Fi drops
 
 ## Later
