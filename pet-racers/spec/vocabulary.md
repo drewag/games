@@ -14,7 +14,7 @@ first column is the one you want.
 | Spin out | A kart twirls and slows after a power hits it | play.md | knocked out, stunned, crash |
 | Catch-up | Rivals easing off or speeding up to keep it close | play.md | rubber band, rubberbanding |
 | Pick screen | The title screen with the five cards | play.md | character select, menu |
-| Friend | The other person's racer when two iPads race | play.md | remote player, peer, player 2, guest |
-| Room | Two iPads joined to race each other | play.md | lobby, session, match, game |
+| Friend | Another person's racer, on another iPad | play.md | remote player, peer, player 2, guest |
+| Room | iPads joined to race each other (up to five) | play.md | lobby, session, match, game |
 | Room code | The four letters that join a room | play.md | PIN, game code, invite |
-| Host | The iPad that made the room; it drives the rivals | play.md | server, leader, owner |
+| Host | The iPad that made the room; relays messages and drives the rivals | play.md | server, leader, owner |

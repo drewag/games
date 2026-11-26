@@ -2,7 +2,7 @@
 
 The five pets come from the hand-drawn character cards. Every pet appears in every race: the one
 you pick is your **racer**, and the others are **rivals** driven by the computer. When
-racing a friend, one of them is the **friend**'s racer instead.
+racing friends, each **friend**'s racer takes a rival's place.
 
 Names follow the cards. **Duffy** is the yellow pet and **Mango** is the white calico with a
 brown and an orange ear. The older games name them differently (Snack Attack calls the

@@ -150,7 +150,7 @@
     <p id="sub"></p>
     <button id="again" class="drawn">Race again!</button>
     <button id="other" class="drawn">Pick a pet</button>
-    <p id="cardWait" class="hidden">Your friend picks what’s next.</p>
+    <p id="cardWait" class="hidden">The room maker picks what’s next.</p>
   </div>
 </div>
 
@@ -1042,13 +1042,13 @@ const LAPS = 3;
 const MAX_SPEED = 26;
 const input = { left: false, right: false };
 let player = RACERS[0];
-let friend = null;            // the other iPad's racer, when racing a friend
+let friends = [];             // other people's racers, when racing friends
 let rivals = RACERS.slice(1);
-const isHuman = (r) => r === player || r === friend;
+const isHuman = (r) => r === player || friends.includes(r);
 const others = () => RACERS.filter((r) => r !== player);
 
 // This iPad drives the rivals unless it joined someone else's room.
-const drivesRivals = () => !net.conn || net.host;
+const drivesRivals = () => !isGuest();
 
 function progressOf(r) {
   return isHuman(r) ? (r.lap - 1) * N + r.idx : (r.s / TL) * N;
@@ -1059,9 +1059,10 @@ function placeOf(r) {
 
 function resetRace() {
   rivals = RACERS.filter((r) => !isHuman(r));
-  // Staggered grid behind the line; people start at the back, the room's
-  // maker first, so both iPads agree on the order.
-  const humans = !friend ? [player] : net.host ? [player, friend] : [friend, player];
+  // Staggered grid behind the line; people start at the back in the host's
+  // roster order, so every iPad agrees.
+  const humans = net.host ? [player, ...friends]
+    : net.roster.length ? net.roster.map(([, pet]) => racerNamed(pet)) : [player];
   const order = [...rivals, ...humans];
   const skills = [0.94, 0.92, 0.9, 0.88];
   order.forEach((r, k) => {
@@ -1173,24 +1174,26 @@ function updateRivals(dt, canDrive) {
   }
 }
 
-// The friend's kart: last reported position, nudged forward by its speed.
-function updateFriend(dt) {
-  if (!friend || !friend.remote) return;
-  const n = friend.remote;
-  const age = Math.min(0.3, (performance.now() - n.at) / 1000);
-  const want = new V3(n.x + Math.sin(n.h) * n.v * age, 0, n.z + Math.cos(n.h) * n.v * age);
-  if (friend.pos.distanceTo(want) > 12) friend.pos.copy(want);
-  else friend.pos.lerp(want, Math.min(1, dt * 12));
-  friend.heading += angleTo(friend.heading, n.h) * Math.min(1, dt * 12);
-  friend.speed = n.v;
-  friend.spin = Math.max(0, friend.spin - dt);
-  friend.spinAngle = friend.spin > 0 ? friend.spinAngle + dt * 14 : 0;
+// Friends' karts: last reported position, nudged forward by their speed.
+function updateFriends(dt) {
+  for (const r of friends) {
+    const n = r.remote;
+    if (!n) continue;
+    const age = Math.min(0.3, (performance.now() - n.at) / 1000);
+    const want = new V3(n.x + Math.sin(n.h) * n.v * age, 0, n.z + Math.cos(n.h) * n.v * age);
+    if (r.pos.distanceTo(want) > 12) r.pos.copy(want);
+    else r.pos.lerp(want, Math.min(1, dt * 12));
+    r.heading += angleTo(r.heading, n.h) * Math.min(1, dt * 12);
+    r.speed = n.v;
+    r.spin = Math.max(0, r.spin - dt);
+    r.spinAngle = r.spin > 0 ? r.spinAngle + dt * 14 : 0;
+  }
 }
 
 // Spin out another racer. Whoever drives that racer gets told.
 function spinOut(r, text = 'Bonk!') {
   if (r === player || r.spin > 0 || r.brave > 0) return false;
-  if (r === friend || !drivesRivals()) send({ t: 'spin', who: r.name, text });
+  if (friends.includes(r) || !drivesRivals()) send({ t: 'spin', who: r.name, text });
   r.spin = 1.5;
   showPop(text);
   for (let k = 0; k < 5; k++) puff(r.pos.clone().setY(1.2), '#ffcf3f', 0.5);
@@ -1218,8 +1221,7 @@ function syncRacers(t) {
     r.body.position.y = Math.abs(Math.sin(t * 18 + r.phase)) * 0.05 * (r.speed / MAX_SPEED);
     r.pet.scale.setScalar(r.brave > 0 ? 1 + Math.sin(t * 20) * 0.06 : 1);
   }
-  for (const r of [player, friend]) {
-    if (!r) continue;
+  for (const r of [player, ...friends]) {
     const sp = r.speed / MAX_SPEED;
     r.body.rotation.z = -r.steer * 0.06 * sp;
     r.pet.rotation.z = -r.steer * 0.18;
@@ -1238,7 +1240,7 @@ function syncRacers(t) {
       d.normalize();
       for (const [r, sign] of [[A, 1], [B, -1]]) {
         if (r === player) r.pos.addScaledVector(d, sign * push * 0.6);
-        else if (r !== friend && drivesRivals()) r.lat += sign * d.dot(TR[Math.floor(wrap((r.s / TL) * N))]) * push * 0.4;
+        else if (!friends.includes(r) && drivesRivals()) r.lat += sign * d.dot(TR[Math.floor(wrap((r.s / TL) * N))]) * push * 0.4;
       }
       if (player.brave > 0 && (A === player || B === player)) spinOut(A === player ? B : A);
     }
@@ -1275,7 +1277,7 @@ function eat(food) {
 const POWERS = {
   'Gaming Knockout'() {
     burstRing(player);
-    send({ t: 'fx', k: 'ring' });
+    send({ t: 'fx', k: 'ring', o: player.name });
     let hit = 0;
     for (const r of others()) if (r.pos.distanceTo(player.pos) < 11 && spinOut(r)) hit++;
     if (!hit) showPop('Whoosh!');
@@ -1286,14 +1288,14 @@ const POWERS = {
     const rel = angleTo(headingAt(f), player.heading);
     const b = { id: newId(), f, lat: latOf(player.pos, player.idx), latVel: -Math.sin(rel) * 30 };
     addBall(player, b.id, b.f, b.lat, b.latVel);
-    send({ t: 'fx', k: 'ball', ...b });
+    send({ t: 'fx', k: 'ball', o: player.name, ...b });
     showPop('Kick!');
   },
   'Instant Cake'() {
     const at = player.pos.clone().addScaledVector(fwdOf(player), -2.6);
     const id = newId();
     addCake(player, id, at.x, at.z);
-    send({ t: 'fx', k: 'cake', id, x: at.x, z: at.z });
+    send({ t: 'fx', k: 'cake', o: player.name, id, x: at.x, z: at.z });
     showPop('Cake!');
   },
   'Brave Mode'() { player.brave = 4; showPop('Brave!'); },
@@ -1322,8 +1324,7 @@ function updateEffects(dt, t) {
       if (p.life <= 0) p.m.visible = false;
     }
   }
-  for (const r of [player, friend]) {                 // sugar rush and brave sparkles
-    if (!r) continue;
+  for (const r of [player, ...friends]) {             // sugar rush and brave sparkles
     const behind = r.pos.clone().setY(0.4).addScaledVector(fwdOf(r), -1.2);
     if (r.rush > 0 && Math.random() < dt * 20) puff(behind, r.color, 0.4);
     if (r.brave > 0 && Math.random() < dt * 24) puff(behind.setY(0.4 + Math.random()), r.color, 0.5);
@@ -1369,15 +1370,29 @@ function updateEffects(dt, t) {
 }
 
 // ---------------------------------------------------------------------------
-// Racing a friend: two iPads meet through PeerJS's free public server using a
-// four-letter room code, then talk directly to each other.
+// Racing friends: iPads meet through PeerJS's free public server using a
+// four-letter room code. Everyone connects to the host (the iPad that made the
+// room), which keeps the roster, drives the rivals and passes messages along.
 // ---------------------------------------------------------------------------
 const ROOM_PREFIX = 'pet-racers-room-';
 const CODE_LETTERS = 'ABCDEFGHJKMNPQRSTUVWXYZ';    // no I, L or O
-const net = { peer: null, conn: null, host: false, code: '', heard: 0, sent: 0 };
+const net = {
+  peer: null, host: false, code: '', sent: 0,
+  guests: [],                  // host: { conn, id, pet, heard, p } per joined iPad
+  conn: null, heard: 0,        // guest: the connection to the host
+  roster: [],                  // guest: [peer id, pet name] in grid order, host first
+};
+const isGuest = () => !net.host && !!net.conn;
+const inRoom = () => net.host ? !!net.peer : !!net.conn;
+const racerNamed = (name) => RACERS.find((r) => r.name === name);
 
-function send(msg) {
-  if (net.conn && net.conn.open) net.conn.send(msg);
+// Host: to every guest (but `except`). Guest: to the host.
+function send(msg, except = null) {
+  if (net.host) {
+    for (const g of net.guests) if (g !== except && g.conn.open) g.conn.send(msg);
+  } else if (net.conn && net.conn.open) {
+    net.conn.send(msg);
+  }
 }
 
 function makeRoom() {
@@ -1386,130 +1401,212 @@ function makeRoom() {
   net.code = [...Array(4)].map(() => CODE_LETTERS[Math.floor(Math.random() * CODE_LETTERS.length)]).join('');
   showNet('waiting');
   net.peer = new Peer(ROOM_PREFIX + net.code);
-  net.peer.on('connection', (c) => (net.conn ? c.close() : attach(c)));
+  net.peer.on('connection', acceptGuest);
   net.peer.on('error', (e) => (e.type === 'unavailable-id' ? makeRoom() : netError(e)));
 }
 
 function joinRoom(code) {
   leaveRoom();
-  net.host = false;
   net.code = code;
   showNet('joining');
   net.peer = new Peer();
-  net.peer.on('open', () => attach(net.peer.connect(ROOM_PREFIX + code, { reliable: true })));
+  net.peer.on('open', () => {
+    const c = net.peer.connect(ROOM_PREFIX + code, { reliable: true });
+    net.conn = c;
+    c.on('open', () => { net.heard = performance.now(); send({ t: 'hello', pet: player.name }); });
+    c.on('data', onHostMessage);
+    c.on('close', hostLeft);
+    c.on('error', hostLeft);
+  });
   net.peer.on('error', netError);
 }
 
-function attach(c) {
-  net.conn = c;
-  c.on('open', () => {
-    net.heard = performance.now();
-    send({ t: 'hello', pet: player.name });
-  });
-  c.on('data', onMessage);
-  c.on('close', friendLeft);
-  c.on('error', friendLeft);
-}
-
 function netError(e) {
-  const msg = e.type === 'peer-unavailable' ? `There's no room called ${net.code}. Check the code and try again.`
-    : e.type === 'network' || e.type === 'server-error' || e.type === 'socket-error'
-      ? "Couldn't reach the room server. Check the Wi-Fi and try again."
-      : "Something went wrong connecting. Try again.";
+  const msg = {
+    'peer-unavailable': `There's no room called ${net.code}. Check the code and try again.`,
+    busy: `That room is racing right now. Try again when they're back at the pick screen.`,
+    full: `That room is full. Every pet is taken!`,
+    network: "Couldn't reach the room server. Check the Wi-Fi and try again.",
+  }[e.type] || (e.type === 'server-error' || e.type === 'socket-error'
+    ? "Couldn't reach the room server. Check the Wi-Fi and try again."
+    : 'Something went wrong connecting. Try again.');
   leaveRoom();
   showNet('error', msg);
 }
 
 function leaveRoom() {
-  if (net.conn) { send({ t: 'bye' }); net.conn.close(); }
+  if (inRoom()) send({ t: 'bye' });
+  for (const g of net.guests) g.conn.close();
+  if (net.conn) net.conn.close();
   if (net.peer) net.peer.destroy();
-  Object.assign(net, { peer: null, conn: null, host: false });
-  friend = null;
+  Object.assign(net, { peer: null, host: false, guests: [], conn: null, roster: [] });
+  dropFriends(friends);
   updatePickUi();
 }
 
-// The friend left or the connection dropped: their kart becomes a rival and
-// this iPad carries on driving everyone.
-function friendLeft() {
-  if (!net.conn) return;
-  const was = friend;
-  net.conn = null;
-  if (net.peer) net.peer.destroy();
-  Object.assign(net, { peer: null, host: false });
-  friend = null;
+// People who left carry on as rivals from where they are.
+function dropFriends(gone) {
+  gone = [...gone];
+  friends = friends.filter((r) => !gone.includes(r));
   rivals = RACERS.filter((r) => !isHuman(r));
-  if (was) {
-    was.s = (((was.lap - 1) * N + was.idx) / N) * TL;
-    was.lat = THREE.MathUtils.clamp(latOf(was.pos, was.idx), -HALF + 1, HALF - 1);
-    was.skill = 0.9;
+  for (const r of gone) {
+    r.s = r.netS = (((r.lap - 1) * N + r.idx) / N) * TL;
+    r.lat = r.netLat = THREE.MathUtils.clamp(latOf(r.pos, r.idx), -HALF + 1, HALF - 1);
+    r.skill = 0.9;
+    r.remote = null;
   }
-  if (state !== 'title') showPop('Your friend left');
-  updatePickUi();
-  if (state === 'done') finish();
 }
 
-function onMessage(m) {
-  net.heard = performance.now();
+// --- host side -----------------------------------------------------------
+function acceptGuest(c) {
+  const g = { conn: c, id: c.peer, pet: null, heard: performance.now(), p: null };
+  c.on('open', () => {
+    const reason = state !== 'title' ? 'busy' : net.guests.length + 1 >= RACERS.length ? 'full' : null;
+    if (reason) { c.send({ t: 'no', why: reason }); setTimeout(() => c.close(), 500); return; }
+    net.guests.push(g);
+  });
+  c.on('data', (m) => onGuestMessage(g, m));
+  c.on('close', () => guestLeft(g));
+  c.on('error', () => guestLeft(g));
+}
+
+const takenBy = (r, g) => r === player || net.guests.some((o) => o !== g && o.pet === r.name);
+
+function onGuestMessage(g, m) {
+  if (!net.guests.includes(g)) return;
+  g.heard = performance.now();
   switch (m.t) {
     case 'hello':
     case 'pick': {
-      friend = RACERS.find((r) => r.name === m.pet) || null;
-      if (friend === player) {
-        // Both picked the same pet: whoever joined switches to a free one.
-        if (!net.host) pick(RACERS.find((r) => r !== friend));
-      }
+      // Two people can't race the same pet: a clash gets the first free one.
+      const want = racerNamed(m.pet);
+      g.pet = (want && !takenBy(want, g) ? want : RACERS.find((r) => !takenBy(r, g))).name;
       if (m.t === 'hello') showNet(null);
+      updateRoster();
+      break;
+    }
+    case 's': {
+      g.p = m.p;
+      const r = racerNamed(g.pet);
+      if (r && friends.includes(r)) applyRemote(r, m.p);
+      break;
+    }
+    case 'spin': onSpin(m); send(m, g); break;
+    case 'fx': showFx(m); send(m, g); break;
+    case 'gone': removeFxById(m.id); send(m, g); break;
+    case 'bye': guestLeft(g); break;
+  }
+}
+
+function updateRoster() {
+  const before = friends;
+  friends = net.guests.filter((g) => g.pet).map((g) => racerNamed(g.pet));
+  dropFriends(before.filter((r) => !friends.includes(r)));
+  rivals = RACERS.filter((r) => !isHuman(r));
+  send({ t: 'roster', list: [[net.peer.id, player.name], ...net.guests.filter((g) => g.pet).map((g) => [g.id, g.pet])] });
+  if (state === 'title') resetRace();
+  updatePickUi();
+}
+
+function guestLeft(g) {
+  const k = net.guests.indexOf(g);
+  if (k < 0) return;
+  net.guests.splice(k, 1);
+  g.conn.close();
+  if (g.pet && state !== 'title') showPop(`${g.pet} left`);
+  updateRoster();
+  if (state === 'done') finish();
+}
+
+// --- guest side ----------------------------------------------------------
+function onHostMessage(m) {
+  net.heard = performance.now();
+  switch (m.t) {
+    case 'roster': {
+      const first = !net.roster.length;
+      net.roster = m.list;
+      const mine = m.list.find(([id]) => id === net.peer.id);
+      if (mine && mine[1] !== player.name) setPlayer(racerNamed(mine[1]));
+      const before = friends;
+      friends = m.list.filter(([id]) => id !== net.peer.id).map(([, pet]) => racerNamed(pet));
+      dropFriends(before.filter((r) => !friends.includes(r)));
+      if (first) showNet(null);
       if (state === 'title') resetRace();
       updatePickUi();
       break;
     }
+    case 'no': netError({ type: m.why }); break;
     case 'start': startRace(); break;
     case 'lobby': backToPick(); break;
-    case 's': {
-      if (friend) {
-        const [x, z, h, v, steer, lap, idx, spin, brave, rush] = m.p;
-        friend.remote = { x, z, h, v, at: performance.now() };
-        Object.assign(friend, { steer, lap, idx, brave, rush, spin: Math.max(friend.spin, spin) });
+    case 's':
+      for (const [pet, ...p] of m.all) {
+        const r = racerNamed(pet);
+        if (r && friends.includes(r)) applyRemote(r, p);
       }
-      if (m.rv && !net.host) {
-        for (const [name, s, lat, speed, spin] of m.rv) {
-          const r = RACERS.find((o) => o.name === name);
-          if (!r || isHuman(r)) continue;
-          Object.assign(r, { netS: s, netLat: lat, speed, spin: Math.max(r.spin, spin) });
-        }
+      for (const [name, s, lat, speed, spin] of m.rv) {
+        const r = racerNamed(name);
+        if (!r || isHuman(r)) continue;
+        Object.assign(r, { netS: s, netLat: lat, speed, spin: Math.max(r.spin, spin) });
       }
       break;
-    }
-    case 'spin': {
-      if (m.who === player.name) getHit(m.text);
-      else if (drivesRivals()) {
-        const r = RACERS.find((o) => o.name === m.who);
-        if (r && !isHuman(r) && r.spin <= 0) r.spin = 1.5;
-      }
-      break;
-    }
-    case 'fx':
-      if (!friend) break;
-      if (m.k === 'ring') burstRing(friend);
-      if (m.k === 'ball') addBall(friend, m.id, m.f, m.lat, m.latVel);
-      if (m.k === 'cake') addCake(friend, m.id, m.x, m.z);
-      break;
+    case 'spin': onSpin(m); break;
+    case 'fx': showFx(m); break;
     case 'gone': removeFxById(m.id); break;
-    case 'bye': friendLeft(); break;
+    case 'bye': hostLeft(); break;
   }
 }
 
-// About 15 times a second: where our kart is (and, from the room's maker,
-// where the rivals are).
-function netTick(now) {
-  if (!net.conn || !net.conn.open) return;
-  if (now - net.heard > 6000) { friendLeft(); return; }
-  if (now - net.sent < 66) return;
-  net.sent = now;
+// The host left or the connection dropped: this iPad carries on alone,
+// driving everyone else as rivals.
+function hostLeft() {
+  if (!net.conn) return;
+  const racing = state !== 'title';
+  net.conn = null;
+  leaveRoom();
+  if (racing) showPop('The room closed');
+  if (state === 'done') finish();
+}
+
+// --- both ----------------------------------------------------------------
+function applyRemote(r, [x, z, h, v, steer, lap, idx, spin, brave, rush]) {
+  r.remote = { x, z, h, v, at: performance.now() };
+  Object.assign(r, { steer, lap, idx, brave, rush, spin: Math.max(r.spin, spin) });
+}
+
+function onSpin(m) {
+  if (m.who === player.name) { getHit(m.text); return; }
+  const r = racerNamed(m.who);
+  if (r && !isHuman(r) && drivesRivals() && r.spin <= 0) r.spin = 1.5;
+}
+
+function showFx(m) {
+  const owner = racerNamed(m.o);
+  if (!owner || owner === player) return;
+  if (m.k === 'ring') burstRing(owner);
+  if (m.k === 'ball') addBall(owner, m.id, m.f, m.lat, m.latVel);
+  if (m.k === 'cake') addCake(owner, m.id, m.x, m.z);
+}
+
+const myState = () => {
   const p = player;
-  const msg = { t: 's', p: [p.pos.x, p.pos.z, p.heading, p.speed, p.steer, p.lap, p.idx, p.spin, p.brave, p.rush] };
-  if (net.host) msg.rv = rivals.map((r) => [r.name, r.s, r.lat, r.speed, r.spin]);
-  send(msg);
+  return [p.pos.x, p.pos.z, p.heading, p.speed, p.steer, p.lap, p.idx, p.spin, p.brave, p.rush];
+};
+
+// About 15 times a second. Guests send where they are; the host sends where
+// everyone is, rivals included.
+function netTick(now) {
+  if (net.host) {
+    for (const g of [...net.guests]) if (now - g.heard > 6000) guestLeft(g);
+  } else if (net.conn && net.conn.open && now - net.heard > 6000) {
+    hostLeft();
+    return;
+  }
+  if (!inRoom() || now - net.sent < 66) return;
+  net.sent = now;
+  if (!net.host) { send({ t: 's', p: myState() }); return; }
+  if (!net.guests.length) return;
+  const all = [[player.name, ...myState()], ...net.guests.filter((g) => g.pet && g.p).map((g) => [g.pet, ...g.p])];
+  send({ t: 's', all, rv: rivals.map((r) => [r.name, r.s, r.lat, r.speed, r.spin]) });
 }
 
 // ---------------------------------------------------------------------------
@@ -1563,13 +1660,17 @@ function setState(s) {
 // Pick screen: one card per pet. The friend's pet is taken.
 const PICK_KEY = 'pet-racers-pet';
 function pick(r) {
-  if (r === friend) return;
+  if (friends.includes(r)) return;
+  setPlayer(r);
+  if (net.host) updateRoster();
+  else send({ t: 'pick', pet: r.name });
+}
+function setPlayer(r) {
   player = r;
   try { localStorage.setItem(PICK_KEY, r.name); } catch (e) { /* private mode */ }
   $('pickName').textContent = r.name;
   $('pickKart').textContent = `${r.kart} · ${r.power}`;
   $('power').innerHTML = r.power.replace(' ', '<br>') + '!';
-  send({ t: 'pick', pet: r.name });
   resetRace();
   updatePickUi();
 }
@@ -1589,20 +1690,21 @@ for (const r of RACERS) {
 }
 
 function updatePickUi() {
-  const together = !!net.conn && !!friend;
+  const room = inRoom(), guest = isGuest(), n = friends.length;
   for (const el of $('cards').children) {
     el.classList.toggle('on', el.dataset.name === player.name);
-    el.classList.toggle('taken', !!friend && el.dataset.name === friend.name);
+    el.classList.toggle('taken', friends.some((r) => r.name === el.dataset.name));
   }
-  $('go').textContent = together ? 'Start!' : 'Race!';
-  $('go').classList.toggle('hidden', together && !net.host);
-  $('friendBtn').textContent = together ? 'Leave' : 'Race a friend';
-  $('netStatus').classList.toggle('hidden', !together);
-  $('netStatus').textContent = net.host ? 'Racing with a friend! Tap Start when you’re both ready.'
-    : 'Racing with a friend! Your friend taps Start.';
-  $('again').classList.toggle('hidden', !!net.conn && !net.host);
-  $('other').classList.toggle('hidden', !!net.conn && !net.host);
-  $('cardWait').classList.toggle('hidden', !(net.conn && !net.host));
+  $('go').textContent = n ? 'Start!' : 'Race!';
+  $('go').classList.toggle('hidden', guest);
+  $('friendBtn').textContent = room ? 'Leave' : 'Race a friend';
+  $('netStatus').classList.toggle('hidden', !room);
+  $('netStatus').textContent = net.host
+    ? `Room ${net.code} · ${n} friend${n === 1 ? '' : 's'} here · tap Start when everyone’s ready`
+    : `Room ${net.code} · ${n + 1} racers · the room maker taps Start`;
+  $('again').classList.toggle('hidden', guest);
+  $('other').classList.toggle('hidden', guest);
+  $('cardWait').classList.toggle('hidden', !guest);
 }
 
 // The "Race a friend" panel.
@@ -1611,12 +1713,12 @@ function showNet(view, msg = '') {
   el.classList.toggle('hidden', !view);
   if (!view) return;
   const views = {
-    menu: `<h2>Race a friend</h2><p>Both iPads need Wi-Fi.</p>
+    menu: `<h2>Race friends</h2><p>Up to five iPads, all on Wi-Fi.</p>
       <button data-act="make" class="drawn">Make a room</button>
       <button data-act="join" class="drawn">Join a room</button>
       <button data-act="close" class="drawn plain">Back</button>`,
     waiting: `<h2>Your room code</h2><div class="code">${net.code}</div>
-      <p>Type it on the other iPad.</p><button data-act="cancel" class="drawn plain">Cancel</button>`,
+      <p>Type it on the other iPads.</p><button data-act="cancel" class="drawn plain">Cancel</button>`,
     join: `<h2>Join a room</h2>
       <input id="codeIn" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD">
       <div><button data-act="go" class="drawn">Join</button><button data-act="close" class="drawn plain">Back</button></div>`,
@@ -1645,7 +1747,7 @@ $('net').addEventListener('click', (e) => {
 });
 
 function startRace() {
-  if (net.conn && net.host) send({ t: 'start' });
+  if (net.host) send({ t: 'start' });
   showNet(null);
   resetRace();
   const fwd = fwdOf(player);
@@ -1656,7 +1758,7 @@ function startRace() {
 }
 
 function backToPick() {
-  if (net.conn && net.host) send({ t: 'lobby' });
+  if (net.host) send({ t: 'lobby' });
   resetRace();
   setState('title');
   updatePickUi();
@@ -1678,7 +1780,7 @@ function updateHud() {
 }
 
 $('go').addEventListener('click', startRace);
-$('friendBtn').addEventListener('click', () => (net.conn ? leaveRoom() : showNet('menu')));
+$('friendBtn').addEventListener('click', () => (inRoom() ? leaveRoom() : showNet('menu')));
 $('again').addEventListener('click', startRace);
 $('other').addEventListener('click', backToPick);
 
@@ -1696,7 +1798,7 @@ const KEYS = { ArrowLeft: 'left', a: 'left', ArrowRight: 'right', d: 'right' };
 window.addEventListener('keydown', (e) => {
   if (KEYS[e.key]) input[KEYS[e.key]] = true;
   if (e.key === ' ' || e.key === 'Enter') {
-    const canStart = !net.conn || net.host;
+    const canStart = !isGuest();
     if (state === 'race') usePower();
     else if ((state === 'title' || state === 'done') && canStart && $('net').classList.contains('hidden')) startRace();
     e.preventDefault();
@@ -1713,7 +1815,7 @@ window.autoUpdateIsIdle = () => (state === 'title' || state === 'done') && !net.
 // For testing from the console.
 window.petRacers = {
   RACERS, input, startRace, usePower, pick, placeOf, progressOf, cakes, balls, net, makeRoom, joinRoom, leaveRoom,
-  get player() { return player; }, get friend() { return friend; }, get rivals() { return rivals; }, get state() { return state; },
+  get player() { return player; }, get friends() { return friends; }, get rivals() { return rivals; }, get state() { return state; },
 };
 
 let saved = null;
@@ -1741,7 +1843,7 @@ function frame(now) {
     updatePlayer(dt, driving);
     updateRivals(dt, driving);
   }
-  updateFriend(dt);
+  updateFriends(dt);
   if (state === 'race') {
     raceTime += dt;
     if (player.lap > LAPS) finish();

@@ -1,7 +1,7 @@
 # How it plays
 
-Pet Racers is a kart racer: three laps of one track against four rivals, or against a
-friend on another iPad and three rivals. The hard parts
+Pet Racers is a kart racer: three laps of one track against four rivals, or against
+friends on other iPads with rivals filling the remaining spots. The hard parts
 of the genre are taken away for a 9-year-old. The kart accelerates by itself, you can't
 fall off or get stuck, and nobody is far behind for long.
 
@@ -51,26 +51,29 @@ A rival hit by a power **spins out**: their kart twirls, they slow to a crawl fo
 1.5 seconds, and "Bonk!" pops up. Then they carry on. Rivals never spin you out, because
 they don't use powers. A friend's powers can.
 
-## Racing a friend
+## Racing friends
 
-Two iPads can race each other. **Race a friend** on the pick screen offers:
+Up to five iPads can race each other, one pet each. **Race a friend** on the pick screen
+offers:
 
 - **Make a room**: shows a four-letter **room code** (no I, L or O).
-- **Join a room**: type the code from the other iPad.
+- **Join a room**: type the code from the room maker's iPad.
 
-Once joined, both iPads are back on the pick screen together. A pet can't be picked by both;
-the friend's card says "Friend". If both had the same pet when joining, the iPad that
-joined switches. The **host**, the iPad that made the room, gets **Start!**. The other iPad
-waits. After a race, the host chooses **Race again!** or a new pick. **Leave** goes back
-to racing alone.
+The iPad that made the room is the **host**. Everyone who joins lands on the pick screen
+together, and the host's pick screen keeps showing the room code so more can join. Only
+the pick screen takes new people: a room that's mid-race, or that has all five pets, turns
+joiners away with a message. Two people can't have the same pet. Taken cards say "Friend",
+and anyone who joins holding a taken pet gets the first free one. The host gets **Start!**
+and chooses **Race again!** or a new pick afterwards. Everyone else waits. **Leave** goes
+back to racing alone.
 
-In a race with a friend, both people start at the back of the grid and the three other pets
-are rivals. Powers work on everyone: Gaming Knockout, the ball, cakes and Brave Mode spin
-out a friend just like a rival. Snacks are each iPad's own, so a snack the friend eats
-may still be there on your screen.
+In a race with friends, the people start at the back of the grid in the order they joined,
+host first. The remaining pets are rivals. Powers work on everyone: Gaming Knockout, the
+ball, cakes and Brave Mode spin out a friend just like a rival. Snacks are each iPad's own,
+so a snack a friend eats may still be there on your screen.
 
-If the friend leaves or the connection drops, their kart carries on as a rival and the race
-continues.
+If a friend leaves or drops off, their kart carries on as a rival. If the host leaves, the
+room closes: every other iPad keeps racing alone, with everyone else as rivals.
 
-Both iPads need the internet to find each other, then race directly over the network. See
-[details/network.md](details/network.md).
+The iPads need the internet to find each other, then race over the network through the
+host. See [details/network.md](details/network.md).

@@ -13,7 +13,7 @@ paper.
 
 1. [The racers](spec/racers.md): the five pets, their karts and powers
 2. [How it plays](spec/play.md): picking a pet, controls, a race, snacks, spinning out,
-   racing a friend
+   racing friends
 3. [The look](spec/look.md): how the drawings become 3D and why it looks hand-drawn
 
 Terms are listed in [vocabulary](spec/vocabulary.md). What's left to build is in
