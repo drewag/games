@@ -1,0 +1,280 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Pet Quest hero sprites</title>
+<style>
+  body { margin: 0; background: #fbf8f1; font-family: "Marker Felt", "Chalkboard SE", "Comic Sans MS", cursive; color: #2a2228; }
+  h1 { text-align: center; margin: 16px 0 2px; }
+  h2 { text-align: center; margin: 14px 0 0; font-size: 20px; color: #6d6a70; font-weight: normal; }
+  .row { display: flex; gap: 22px; justify-content: center; align-items: flex-end; flex-wrap: wrap; padding: 8px 12px; border-bottom: 3px solid #6d6a70; }
+  figure { margin: 0; text-align: center; }
+  figcaption { margin-top: 4px; font-size: 15px; }
+  canvas { image-rendering: pixelated; display: block; margin: 0 auto; }
+</style></head>
+<body>
+<h1>Pet Quest: hero sprites</h1>
+<h2>Front, with pets at her original size for scale</h2>
+<div class="row" id="front"></div>
+<h2>Walking (live)</h2>
+<div class="row" id="live"></div>
+<h2>Walk cycle frames</h2>
+<div class="row" id="ruby-frames"></div>
+<div class="row" id="zach-frames"></div>
+<script>
+const PAL = {
+  H: '#4a2c1d', s: '#f6c9a8', S: '#dfac8a', e: '#3a2a2a', c: '#f4a6c4', C: '#d98aa9', m: '#c94a62',
+  p: '#f7b2cf', q: '#ea93b8', Q: '#d67ca3', P: '#ee7fae', W: '#ffffff', D: '#d4d4d4',
+  b: '#4f86d6', G: '#3fae4f', g: '#2f8c3d', N: '#1f2d5a', K: '#2a2228', B: '#2f6fe0', V: '#244fa0',
+  u: '#4b1f8f', v: '#a58ad8', o: '#4a4a52', n: '#3a2a2a', w: '#ffffff', x: '#f4a6c4',
+};
+
+// ---- front views (hand drawn) ----
+const FRONT = {
+  ruby: [
+    '.....HHHHHH.....',
+    '...HHHHHHHHHH...',
+    '..HHHHHHHHHHHH..',
+    '.HHHHHHHHHHHHHH.',
+    '.HHHssssssssHHH.',
+    '.HHssssssssssHH.',
+    '.HHssessssessHH.',
+    '.HHssessssessHH.',
+    '.HHscssssssscHH.',
+    '.HHsssmssmsssHH.',
+    'HHHssssmmssssHHH',
+    'HHHHHssssssHHHHH',
+    'HHHHHH.ss.HHHHHH',
+    'HHHppppppppppHHH',
+    'HHppppppppppppHH',
+    'HqppWppppppWppqH',
+    'HqppppppppppppqH',
+    'HqppppppppppppqH',
+    '.qppppppppppppq.',
+    '.qppppppppppppq.',
+    '.sPPPPPPPPPPPPs.',
+    '..PPPPPPPPPPPP..',
+    '.PPPPPPPPPPPPPP.',
+    'PPPPPPPPPPPPPPPP',
+    '....ss....ss....',
+    '....ss....ss....',
+    '....ss....ss....',
+    '....cc....cc....',
+    '...WWW....WWW...',
+    '..WWWW....WWWW..',
+  ],
+  zach: [
+    '....H.HH.H.H....',
+    '...HHHHHHHHHH...',
+    '..HHHHHHHHHHHH..',
+    '..HHHHHHHHHHHH..',
+    '..HHssssssssHH..',
+    '..HssssssssssH..',
+    '..sssbssssbsss..',
+    '..sssbssssbsss..',
+    '..scsssssssscs..',
+    '..sssmssssmsss..',
+    '...ssssmmssss...',
+    '....ssssssss....',
+    '......ssss......',
+    '...GGGGGGGGGG...',
+    '..GGGGGGGGGGGG..',
+    '.GGGGGGGGGGGGGG.',
+    '.ssGGGGGGGGGGss.',
+    '.ssGGGGGGGGGGss.',
+    '..sGGGGGGGGGGs..',
+    '...NNNNNNNNNN...',
+    '...NNNNNNNNNN...',
+    '...NNNN..NNNN...',
+    '....ss....ss....',
+    '....ss....ss....',
+    '....WW....WW....',
+    '...KBB....KBB...',
+  ],
+};
+
+// ---- side views: hand-drawn head + body, generated arms and legs ----
+// Facing right. Hip and shoulder points are where the limbs attach.
+const SIDE = {
+  ruby: {
+    top: [
+      '....HHHHHH......',
+      '..HHHHHHHHHH....',
+      '.HHHHHHHHHHHH...',
+      '.HHHHHHHHHHHHH..',
+      'HHHHHHHHHHssss..',
+      'HHHHHHHHHsssss..',
+      'HHHHHHHHssssess.',
+      'HHHHHHHHsssssss.',
+      'HHHHHHHHscsssss.',
+      'HHHHHHHHssssmss.',
+      '..HHHHHHHsssss..',
+      '..HHHHHH.sss....',
+      '..HHHHHpppppp...',
+      '...HHHppppppp...',
+      '...HHHpppppppp..',
+      '....HHppppWpp...',
+      '....HHppppppp...',
+      '.....Hppppppp...',
+      '......ppppppp...',
+      '.....PPPPPPPPP..',
+      '....PPPPPPPPPPP.',
+      '....PPPPPPPPPPP.',
+    ],
+    hip: [8.5, 20], shoulder: [9, 13],
+    leg: { near: 's', far: 'S', sock: ['c', 'C'], shoe: [['W', 'W'], ['D', 'D']] },
+    arm: { sleeve: ['q', 'Q'], sleeveLen: 4, hand: ['s', 'S'], len: 6 },
+  },
+  zach: {
+    top: [
+      '.....H.H.H......',
+      '....HHHHHHH.....',
+      '...HHHHHHHHH....',
+      '..HHHHHHHHHHH...',
+      '..HHHHHHHHHsss..',
+      '..HHHHHHHHssss..',
+      '..HHHHHHssssbss.',
+      '..HHHHsssssssss.',
+      '...sssssscsssss.',
+      '....sssssssmss..',
+      '.....ssssssss...',
+      '........ss......',
+      '......GGGGGG....',
+      '.....GGGGGGGG...',
+      '.....GGGGGGGG...',
+      '.....GGGGGGGG...',
+      '.....GGGGGGGG...',
+      '.....NNNNNNNN...',
+      '.....NNNNNNNN...',
+    ],
+    hip: [8.5, 17], shoulder: [9, 13],
+    leg: { near: 's', far: 'S', sock: ['W', 'D'], shoe: [['K', 'B'], ['K', 'V']] },
+    arm: { sleeve: ['G', 'g'], sleeveLen: 2, hand: ['s', 'S'], len: 5 },
+  },
+};
+
+const THIGH = 4.5, SHIN = 4.5;
+
+function blank(w, h) { return Array.from({ length: h }, () => Array(w).fill('.')); }
+
+// 2-square-wide limb from (x0,y0) along angle (radians from straight down, + = forward)
+function limb(g, x0, y0, ang, len, colorAt) {
+  const steps = Math.ceil(len * 3);
+  let x = x0, y = y0;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    x = x0 + Math.sin(ang) * len * t;
+    y = y0 + Math.cos(ang) * len * t;
+    const c = colorAt(t);
+    const xi = Math.round(x - 0.5), yi = Math.round(y);
+    for (const dx of [0, 1]) if (g[yi] && xi + dx >= 0 && xi + dx < g[0].length) g[yi][xi + dx] = c;
+  }
+  return [x, y];
+}
+
+function stamp(g, rows, ox, oy) {
+  rows.forEach((r, j) => [...r].forEach((c, i) => { if (c !== '.' && g[oy + j]) g[oy + j][ox + i] = c; }));
+}
+
+// One walk frame at phase t in [0,1).
+function sideFrame(who, t) {
+  const d = SIDE[who];
+  const W = 18, Hh = d.top.length + 12;
+  const far = blank(W, Hh), body = blank(W, Hh), near = blank(W, Hh);
+  const T = Math.PI * 2;
+  const legAngles = (ph) => {
+    const thigh = 0.5 * Math.sin(T * ph);
+    const knee = 0.15 + 0.9 * Math.pow(Math.max(0, Math.cos(T * ph)), 2);
+    return [thigh, thigh - knee];
+  };
+  const [hx, hy] = d.hip, [sx, sy] = d.shoulder;
+  const ox = 1;
+
+  const drawLeg = (ph, isFar) => {
+    const g = isFar ? far : near, far_ = isFar;
+    const [a1, a2] = legAngles(ph);
+    const col = far_ ? d.leg.far : d.leg.near;
+    const [kx, ky] = limb(g, hx + ox + (far_ ? -1 : 0), hy, a1, THIGH, () => col);
+    const sock = d.leg.sock[far_ ? 1 : 0];
+    const [fx, fy] = limb(g, kx, ky, a2, SHIN, (u) => (u > 0.75 ? sock : col));
+    const [toe, heel] = d.leg.shoe[far_ ? 1 : 0];
+    const x = Math.round(fx - 0.5), y = Math.round(fy) + 1;
+    for (let i = -1; i <= 2; i++) if (g[y]) g[y][x + i] = i === 2 ? toe : heel;
+    if (g[y - 1]) { g[y - 1][x] = heel; g[y - 1][x + 1] = heel; }
+    return y;
+  };
+  const drawArm = (ph, isFar) => {
+    const g = isFar ? far : near;
+    const a = -0.55 * Math.sin(T * ph);
+    const i = isFar ? 1 : 0;
+    limb(g, sx + ox + (isFar ? -1 : 0), sy, a + 0.08, d.arm.len, (u) =>
+      u * d.arm.len < d.arm.sleeveLen ? d.arm.sleeve[i] : d.arm.hand[i]);
+  };
+
+  drawArm(t + 0.5, true);
+  const f1 = drawLeg(t + 0.5, true);
+  stamp(body, d.top, ox, 0);
+  const f2 = drawLeg(t, false);
+  drawArm(t, false);
+
+  const ground = Hh - 1, low = Math.max(f1, f2);
+  const shift = ground - low;
+  return [far, body, near].map((g) => {
+    const out = blank(W, Hh);
+    g.forEach((r, j) => r.forEach((c, i) => { if (c !== '.' && out[j + shift]) out[j + shift][i] = c; }));
+    return out.map(r => r.join(''));
+  });
+}
+
+const PETS = {
+  fluff: ['...ww.ww...', '...ww.ww...', '...ww.ww...', '...wwwww...', '..wwwwwww..', '.wwwwwwwww.',
+          'wwowwwwwoww', 'wwowwwwwoww', 'wwwwwnwwwww', 'xxwwwwwwwxx', '.xxwwwwwxx.', '...wwwww...',
+          '....www....', '....w.w....'],
+  choco: ['..uu....uu..', '..uu....uu..', '.uuuuuuuuuu.', 'uuvvvvvvvvuu', 'uvovvvvvvovu', 'uvovvvvvvovu',
+          'uvvvvnnvvvvu', 'uxxvvvvvvxxu', '.uuuuuuuuuu.', '...uuuuuu...', '....uuuu....', '....u..u....'],
+};
+
+function draw(rowsOrLayers, px, canvas) {
+  const layers = Array.isArray(rowsOrLayers[0]) ? rowsOrLayers : [rowsOrLayers];
+  const ow = Math.max(1, Math.round(px * 0.22));
+  const w = Math.max(...layers[0].map(r => r.length)), h = layers[0].length;
+  const c = canvas || document.createElement('canvas');
+  c.width = w * px + ow * 2; c.height = h * px + ow * 2;
+  const x = c.getContext('2d');
+  x.clearRect(0, 0, c.width, c.height);
+  for (const rows of layers) {
+    const each = (fn) => rows.forEach((r, j) => [...r].forEach((ch, i) => { if (ch !== '.') fn(ch, i, j); }));
+    x.fillStyle = '#2a2228';
+    each((ch, i, j) => x.fillRect(i * px, j * px, px + ow * 2, px + ow * 2));
+    each((ch, i, j) => { x.fillStyle = PAL[ch]; x.fillRect(ow + i * px, ow + j * px, px, px); });
+  }
+  return c;
+}
+function fig(id, canvas, label) {
+  const f = document.createElement('figure');
+  f.append(canvas);
+  const cap = document.createElement('figcaption'); cap.textContent = label; f.append(cap);
+  document.getElementById(id).append(f);
+}
+
+const PX = 6, N = 6, LIVE = 9;
+fig('front', draw(FRONT.ruby, PX), 'Ruby');
+fig('front', draw(FRONT.zach, PX), 'Zachary');
+fig('front', draw(PETS.fluff, PX), 'Fluff Puff');
+fig('front', draw(PETS.choco, PX), 'Choco');
+
+for (const who of ['ruby', 'zach']) {
+  for (let i = 0; i < N; i++) fig(who + '-frames', draw(sideFrame(who, i / N), PX), `${i + 1}`);
+}
+
+const live = {};
+for (const who of ['ruby', 'zach']) {
+  const c = document.createElement('canvas');
+  fig('live', c, who === 'ruby' ? 'Ruby' : 'Zachary');
+  live[who] = { c, frames: Array.from({ length: N }, (_, i) => sideFrame(who, i / N)) };
+}
+fig('live', draw(PETS.fluff, LIVE), 'Fluff Puff');
+let k = 0;
+setInterval(() => {
+  for (const who in live) draw(live[who].frames[k % N], LIVE, live[who].c);
+  k++;
+}, 1000 / 10);
+</script>
+</body></html>
