@@ -32,6 +32,10 @@
     width: 56px; height: 56px; display: grid; place-items: center; font-size: 30px;
     text-decoration: none; color: var(--ink);
   }
+  #mute {
+    position: absolute; top: calc(12px + env(safe-area-inset-top)); left: calc(80px + env(safe-area-inset-left));
+    width: 56px; height: 56px; display: grid; place-items: center; font-size: 26px; padding: 0; cursor: pointer;
+  }
   #hud {
     position: absolute; top: calc(12px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
     padding: 6px 22px; font-size: 28px; white-space: nowrap; pointer-events: none;
@@ -145,6 +149,7 @@
 <div class="ui">
   <div id="flash"></div>
   <a id="home" class="drawn" href="../" aria-label="Back to games">&#8962;</a>
+  <button id="mute" class="drawn" aria-label="Sound on or off"></button>
   <div id="hud" class="drawn hidden"></div>
   <div id="meter" class="drawn hidden"><i></i><i></i><i></i></div>
   <div id="steer" class="pad hidden">
@@ -1585,6 +1590,142 @@ function clearFx() {
 }
 
 // ---------------------------------------------------------------------------
+// Sound: everything is made on the spot with Web Audio, like Snack Attack, so
+// there are no files and it works offline. The engine, drift squeal and
+// off-road rumble play all the time while racing; the rest are short blips.
+// ---------------------------------------------------------------------------
+const MUTE_KEY = 'pet-racers-muted';
+let AC = null, muted = false, master = null, loops = null;
+try { muted = localStorage.getItem(MUTE_KEY) === '1'; } catch (e) { /* private mode */ }
+
+// Browsers only start audio from a tap or key press.
+function wakeAudio() {
+  if (!AC) {
+    try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+    master = AC.createGain();
+    master.gain.value = muted ? 0 : 1;
+    master.connect(AC.destination);
+    loops = makeLoops();
+  }
+  if (AC.state === 'suspended') AC.resume();
+}
+function setMuted(m) {
+  muted = m;
+  try { localStorage.setItem(MUTE_KEY, m ? '1' : '0'); } catch (e) { /* private mode */ }
+  if (master) master.gain.setTargetAtTime(m ? 0 : 1, AC.currentTime, 0.02);
+  $('mute').textContent = m ? '\u{1F507}' : '\u{1F50A}';
+}
+
+function tone(f, start, dur, type = 'square', vol = 0.05, f2 = 0) {
+  if (!AC) return;
+  const t = AC.currentTime + start;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(f, t);
+  if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(master);
+  o.start(t);
+  o.stop(t + dur + 0.02);
+}
+let noiseBuf = null;
+function noise(start, dur, vol = 0.08, freq = 1200, type = 'bandpass', freq2 = 0) {
+  if (!AC) return;
+  if (!noiseBuf) {
+    noiseBuf = AC.createBuffer(1, AC.sampleRate, AC.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  const t = AC.currentTime + start;
+  const src = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+  src.buffer = noiseBuf;
+  src.loop = true;
+  f.type = type;
+  f.frequency.setValueAtTime(freq, t);
+  if (freq2) f.frequency.exponentialRampToValueAtTime(freq2, t + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(f).connect(g).connect(master);
+  src.start(t);
+  src.stop(t + dur + 0.02);
+}
+
+// The always-on sounds, silent until racing.
+function makeLoops() {
+  const gainOf = (node) => { const g = AC.createGain(); g.gain.value = 0; node.connect(g).connect(master); return g; };
+  const engine = AC.createOscillator(), engine2 = AC.createOscillator(), lp = AC.createBiquadFilter();
+  engine.type = 'sawtooth';
+  engine2.type = 'square';
+  lp.type = 'lowpass';
+  lp.frequency.value = 500;
+  engine.connect(lp);
+  engine2.connect(lp);
+  const engineGain = gainOf(lp);
+  engine.start();
+  engine2.start();
+  const hiss = (freq, type, q) => {
+    noise(0, 0.001, 0.0001);                       // makes noiseBuf
+    const src = AC.createBufferSource(), f = AC.createBiquadFilter();
+    src.buffer = noiseBuf;
+    src.loop = true;
+    f.type = type;
+    f.frequency.value = freq;
+    f.Q.value = q;
+    src.connect(f);
+    src.start();
+    return gainOf(f);
+  };
+  return { engine, engine2, engineGain, lp, squeal: hiss(2200, 'bandpass', 6), rumble: hiss(260, 'lowpass', 1) };
+}
+
+function updateSound() {
+  if (!loops) return;
+  const t = AC.currentTime, me = player, racing = state === 'countdown' || state === 'race' || state === 'done';
+  const sp = Math.abs(me.speed) / MAX_SPEED;
+  const f = 48 + sp * 75 + (me.boost > 0 || me.rush > 0 ? 25 : 0);
+  loops.engine.frequency.setTargetAtTime(f, t, 0.08);
+  loops.engine2.frequency.setTargetAtTime(f * 0.5, t, 0.08);
+  loops.lp.frequency.setTargetAtTime(300 + sp * 700, t, 0.1);
+  loops.engineGain.gain.setTargetAtTime(racing ? 0.05 + sp * 0.03 : 0, t, 0.15);
+  loops.squeal.gain.setTargetAtTime(racing && me.drift ? 0.025 + me.driftLv * 0.008 : 0, t, 0.05);
+  const offroad = Math.abs(latOf(me.pos, me.idx)) > HALF + 1.2 && me.brave <= 0;
+  loops.rumble.gain.setTargetAtTime(racing && offroad && me.speed > 4 ? 0.12 : 0, t, 0.08);
+}
+
+const SFX = {
+  tap: () => tone(880, 0, 0.06, 'triangle', 0.08),
+  count: () => tone(440, 0, 0.18, 'square', 0.07),
+  go: () => { tone(880, 0, 0.35, 'square', 0.07); tone(1320, 0, 0.35, 'triangle', 0.05); },
+  snack: () => { tone(500, 0, 0.05, 'square', 0.05, 300); tone(700, 0.05, 0.07, 'triangle', 0.06); },
+  fav: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.05, 0.09, 'triangle', 0.07)),
+  full: () => [784, 988, 1175, 1568].forEach((f, i) => tone(f, i * 0.07, 0.16, 'triangle', 0.08)),
+  bonk: () => { tone(330, 0, 0.1, 'square', 0.06, 160); tone(160, 0.08, 0.2, 'sawtooth', 0.05, 70); },
+  ouch: () => { tone(600, 0, 0.5, 'triangle', 0.08, 150); noise(0, 0.3, 0.06, 900); },
+  wall: () => { noise(0, 0.15, 0.12, 400, 'lowpass'); tone(110, 0, 0.12, 'triangle', 0.08, 70); },
+  bump: () => tone(180, 0, 0.08, 'triangle', 0.06, 120),
+  lap: () => { tone(988, 0, 0.12, 'triangle', 0.08); tone(1319, 0.1, 0.2, 'triangle', 0.08); },
+  finalLap: () => [659, 659, 659, 880].forEach((f, i) => tone(f, i * 0.12, i === 3 ? 0.4 : 0.09, 'square', 0.06)),
+  win: () => [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone(f, i * 0.12, i === 5 ? 0.6 : 0.14, 'square', 0.06)),
+  finish: () => [523, 659, 784].forEach((f, i) => tone(f, i * 0.14, i === 2 ? 0.5 : 0.15, 'triangle', 0.08)),
+  hop: () => tone(300, 0, 0.14, 'sine', 0.09, 700),
+  spark: (lv) => tone([0, 880, 1175, 1568][lv], 0, 0.1, 'triangle', 0.06),
+  boost: () => { noise(0, 0.5, 0.1, 500, 'bandpass', 3000); tone(200, 0, 0.4, 'sawtooth', 0.04, 500); },
+  stall: () => [0, 0.15, 0.3].forEach((d) => noise(d, 0.12, 0.1, 300, 'lowpass')),
+  // one for each power
+  'Gaming Knockout': () => { tone(120, 0, 0.5, 'sine', 0.15, 40); noise(0, 0.4, 0.08, 600, 'lowpass'); },
+  'Speed Eating': () => [0, 0.08, 0.16, 0.24, 0.32].forEach((d) => tone(500 + d * 1500, d, 0.06, 'square', 0.05, 300)),
+  'Sports Ball': () => { noise(0, 0.08, 0.15, 800); tone(200, 0, 0.15, 'triangle', 0.1, 90); },
+  'Instant Cake': () => { tone(700, 0, 0.08, 'sine', 0.1, 1400); tone(1047, 0.1, 0.25, 'triangle', 0.07); },
+  'Brave Mode': () => [392, 523, 659, 784].forEach((f, i) => tone(f, i * 0.09, i === 3 ? 0.4 : 0.1, 'square', 0.06)),
+  'Math Defeater': () => tone(1500, 0, 0.35, 'square', 0.05, 300),
+  'Instant Hacking': () => [0, 0.05, 0.1, 0.15, 0.2, 0.25].forEach((d) => tone(300 + Math.random() * 1200, d, 0.05, 'square', 0.05)),
+  'Fashion Shoot': () => { noise(0, 0.05, 0.2, 4000, 'highpass'); tone(2000, 0.05, 0.3, 'sine', 0.05, 600); },
+  'Mind Access': () => { tone(400, 0, 0.6, 'sine', 0.08, 900); tone(600, 0.1, 0.6, 'sine', 0.05, 1200); },
+};
+const sfx = (name, ...a) => { if (AC && SFX[name]) SFX[name](...a); };
+
+// ---------------------------------------------------------------------------
 // The race
 // ---------------------------------------------------------------------------
 const LAPS = 3;
@@ -1665,6 +1806,7 @@ function updateHop(me, dt, want, canDrive) {
   if (pressed && canDrive && me.hopT <= 0 && !me.drift && me.spin <= 0 && me.stall <= 0) {
     me.hopT = HOP_TIME;
     me.hopHeld = true;
+    sfx('hop');
   }
   if (me.hopT > 0) {
     me.hopT = Math.max(0, me.hopT - dt);
@@ -1683,10 +1825,13 @@ function updateHop(me, dt, want, canDrive) {
     return;
   }
   me.charge += dt * (1 + 0.8 * Math.max(0, me.steer * me.drift));   // tight drifts charge faster
-  me.driftLv = sparkLevel(me.charge);
+  const lv = sparkLevel(me.charge);
+  if (lv > me.driftLv) sfx('spark', lv);
+  me.driftLv = lv;
   if (!input.hop) {
     if (me.driftLv) {
       me.boost = Math.max(me.boost, SPARKS[me.driftLv - 1].boost);
+      sfx('boost');
       for (let k = 0; k < 6; k++) puff(me.pos.clone().setY(0.6).addScaledVector(fwdOf(me), -1.4), SPARKS[me.driftLv - 1].color, 0.4);
     }
     me.drift = 0; me.driftLv = 0;
@@ -1699,9 +1844,11 @@ function launch() {
   if (!pro || me.gasAt === null || !input.gas) return;
   if (me.gasAt > 3) {
     me.stall = 1;
+    sfx('stall');
     showPop('Too soon!');
   } else if (me.gasAt > 2) {
     me.boost = 1;
+    sfx('boost');
     showPop('Rocket start!');
   }
 }
@@ -1763,10 +1910,14 @@ function updatePlayer(dt, canDrive) {
   if (Math.abs(lat2) > WALL) {
     me.pos.addScaledVector(TR[j], (Math.abs(lat2) - WALL) * -Math.sign(lat2));
     me.heading += angleTo(me.heading, Math.atan2(TT[j].x, TT[j].z)) * Math.min(1, dt * 6);
-    if (me.wallCd <= 0) { me.speed *= 0.7; me.wallCd = 0.5; puff(me.pos.clone().setY(0.5)); }
+    if (me.wallCd <= 0) { me.speed *= 0.7; me.wallCd = 0.5; puff(me.pos.clone().setY(0.5)); sfx('wall'); }
   }
 
-  if (prevIdx > N * 0.75 && me.idx < N * 0.25) me.lap++;
+  if (prevIdx > N * 0.75 && me.idx < N * 0.25) {
+    me.lap++;
+    if (state === 'race' && me.lap === LAPS) sfx('finalLap');
+    else if (state === 'race' && me.lap > 1 && me.lap < LAPS) sfx('lap');
+  }
   if (prevIdx < N * 0.25 && me.idx > N * 0.75) me.lap--;
 
   if (offroad && me.brave <= 0 && me.speed > 5 && Math.random() < dt * 14) {
@@ -1835,6 +1986,7 @@ function spinOut(r, text = 'Bonk!') {
   if (friends.includes(r) || !drivesRivals()) send({ t: 'spin', who: r.name, text });
   r.spin = 1.5;
   showPop(text);
+  sfx('bonk');
   for (let k = 0; k < 5; k++) puff(r.pos.clone().setY(1.2), '#ffcf3f', 0.5);
   return true;
 }
@@ -1844,10 +1996,12 @@ function getHit(text) {
   if (player.spin > 0 || player.brave > 0) return;
   player.spin = 1.5;
   showPop(text);
+  sfx('ouch');
   if (text === 'Flash!') screenFlash(0.75);
   for (let k = 0; k < 5; k++) puff(player.pos.clone().setY(1.2), '#ffcf3f', 0.5);
 }
 
+let lastBump = 0;
 function syncRacers(t, dt = 0) {
   for (const r of rivals) {
     const f = (r.s / TL) * N;
@@ -1878,6 +2032,7 @@ function syncRacers(t, dt = 0) {
       const len = d.length();
       if (len >= 2.2 || len < 0.001) continue;
       const push = 2.2 - len;
+      if ((A === player || B === player) && push > 0.4 && performance.now() - lastBump > 400) { lastBump = performance.now(); sfx('bump'); }
       d.normalize();
       for (const [r, sign] of [[A, 1], [B, -1]]) {
         if (r === player) r.pos.addScaledVector(d, sign * push * 0.6);
@@ -1910,8 +2065,10 @@ function updateSnacks(dt, t) {
 }
 
 function eat(food) {
-  const favs = [].concat(player.food);
+  const favs = [].concat(player.food), before = player.meter;
   player.meter = Math.min(3, player.meter + (favs.includes(food) ? 2 : 1));
+  if (player.meter >= 3 && before < 3) sfx('full');
+  else sfx(favs.includes(food) ? 'fav' : 'snack');
   if (player.name === 'Duffy') player.nibble = 0.6;     // Speed Eating: every bite helps
 }
 
@@ -2001,6 +2158,7 @@ const POWERS = {
 function usePower() {
   if (player.meter < 3 || state !== 'race') return;
   player.meter = 0;
+  sfx(player.power);
   POWERS[player.power]();
 }
 
@@ -2589,6 +2747,7 @@ const ORDINAL = ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9t
 function finish() {
   const place = placeOf(player);
   $('result').textContent = place === 1 ? 'You won!' : `${ORDINAL[place]} place!`;
+  if (state === 'race') sfx(place === 1 ? 'win' : 'finish');
   $('sub').textContent = `${player.name} · ${raceTime.toFixed(1)} seconds`;
   updatePickUi();
   setState('done');
@@ -2656,6 +2815,17 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keyup', (e) => { if (keyOf(e)) { keysDown.delete(keyOf(e)); refreshInput(); } });
 
+// Sound starts with the first tap or key; every button and card taps.
+document.addEventListener('pointerdown', wakeAudio, true);
+window.addEventListener('keydown', wakeAudio, true);
+document.addEventListener('click', (e) => { if (e.target.closest('button, .pc')) sfx('tap'); });
+$('mute').addEventListener('click', () => setMuted(!muted));
+setMuted(muted);
+document.addEventListener('visibilitychange', () => {
+  if (!AC) return;
+  if (document.hidden) AC.suspend(); else AC.resume();
+});
+
 // Say goodbye when the page closes, so the friend doesn't wait for a timeout.
 window.addEventListener('pagehide', () => send({ t: 'bye' }));
 
@@ -2685,7 +2855,9 @@ function frame(now) {
 
   if (state === 'countdown') {
     countdown -= dt;
-    $('big').textContent = countdown > 1 ? String(Math.floor(countdown)) : 'GO!';
+    const shown = countdown > 1 ? String(Math.floor(countdown)) : 'GO!';
+    if (shown !== $('big').textContent) sfx(shown === 'GO!' ? 'go' : 'count');
+    $('big').textContent = shown;
     if (countdown <= 1) { setState('race'); launch(); }
   } else if (state === 'race' && countdown > 0) {
     countdown -= dt;
@@ -2707,6 +2879,7 @@ function frame(now) {
   updateEffects(dt, t);
   updateCamera(dt, t);
   netTick(now);
+  updateSound();
   if (state !== 'title') updateHud();
   if (popTimer > 0) { popTimer -= dt; if (popTimer <= 0) $('pop').style.opacity = 0; }
 

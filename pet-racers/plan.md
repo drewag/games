@@ -19,6 +19,7 @@ match it.
   powers (Math Defeater, Instant Hacking, Fashion Shoot), burger snacks, eight on the grid
 - [x] Halsy: model, Fry Box kart, Mind Access power, fries snacks, nine on the grid
 - [x] Backyard and Kitchen tracks, picked on the pick screen (by the host in a room)
+- [x] Sound: engine, drift and off-road loops, effects for snacks, powers, bonks, laps, finish; mute
 - [x] Harder tracks: Snow, Bakery, Toy Room; pick screen in two steps, pet then track
 - [x] Pro driving: Go/Back/Hop, drifting with blue, orange and purple boosts, rocket start
 
@@ -31,5 +32,4 @@ match it.
 
 ## Later
 
-- [ ] Sound
 - [ ] Our own signaling server (Cloudflare Worker) if PeerJS's public one is unreliable

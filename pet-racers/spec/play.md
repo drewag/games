@@ -94,6 +94,20 @@ A rival hit by a power **spins out**: their kart twirls, they slow to a crawl fo
 1.5 seconds, and "Bonk!" pops up. Then they carry on. Rivals never spin you out, because
 they don't use powers. A friend's powers can.
 
+## Sound
+
+Everything you hear is made by the game as it plays (Web Audio, no sound files), so it
+works offline. While racing there's an engine hum that rises with speed, a tire squeal
+while drifting and a rumble off the road. Short sounds mark the countdown beeps and GO,
+eating a snack (a fanfare for a favorite, a chime when the meter fills), each power
+(every one sounds different), spinning someone out, getting spun out, hitting the
+border, bumping a kart, each lap (a jingle for the last one) and the finish (a bigger
+one for winning). Pro driving adds the hop, a blip as the sparks change color, the boost
+and a stall's sputter. Buttons and cards tap.
+
+The 🔊 button next to home mutes everything, and the game remembers it. Sound starts with
+the first tap, as browsers require, and pauses when the iPad switches apps.
+
 ## Racing friends
 
 Up to five iPads can race each other, one pet each. **Race a friend** on the pick screen
