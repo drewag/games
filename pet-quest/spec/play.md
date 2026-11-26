@@ -54,3 +54,34 @@ level can be finished with no friends met.
 Progress saves on the device after every level and checkpoint, separately for Ruby and
 Zachary: friends met, levels finished, and snacks collected per level. The start screen
 shows both heroes with their progress.
+
+## Playing together
+
+Two iPads can play the same level at once, one hero each. They see each other and race to
+collect the snacks. **Play together** on the world map offers **Make a room**, which shows
+a four-letter **room code**, and **Join a room**, where you type the code. Both heroes
+can't be the same, so if both picked Ruby, whoever joins becomes Zachary. Each iPad
+uses that hero's own save.
+
+The **host**, the iPad that made the room, picks the level and starts it. The other iPad
+waits on a "picking a level" screen. In the level:
+
+- **Snacks are shared.** A snack, a treat box or a dropped snack belongs to whoever gets
+  to it first, and it's gone on the other screen too. The HUD shows both counts.
+- **Enemies are shared.** Either hero can stomp them, and Bandit's three stomps can come
+  from either hero. Dug dirt and smashed blocks are gone for both.
+- **Friends are each hero's own.** Each hero has their own friend following them and
+  their own abilities. Friend blocks are solid only for a hero who has met that friend,
+  and each hero meets a level's friend for themselves. Hearts, Zoomies and checkpoints
+  are each hero's own too.
+- Both start at the level's beginning. A hero who runs out of hearts goes back to their
+  checkpoint, and the level carries on as it is.
+
+Whoever reaches the goal first waits for the other. The level clear screen shows both
+counts and who got the most snacks. Then the host picks **Next level**, **Again** or
+**Levels**. If the host goes back mid-level, the other iPad goes back too. A guest who
+goes back sits out the rest of that level.
+
+If the guest leaves, the host's room stays open for someone else. If the host leaves, the
+room closes, and the other iPad keeps playing alone, now moving the enemies itself. See
+[details/network.md](details/network.md).

@@ -12,8 +12,15 @@ touch controls sized for an iPad.
 ## The spec
 
 1. [The world](spec/world.md): story, heroes, friends, enemies
-2. [How it plays](spec/play.md): controls, movement, hearts, snacks, friend blocks, saving
+2. [How it plays](spec/play.md): controls, movement, hearts, snacks, friend blocks, saving,
+   playing together
 3. [Levels](spec/levels.md): how levels are written and the plan for level 1-1
 
 Terms are listed in [vocabulary](spec/vocabulary.md). What's left to build is in
 [plan.md](plan.md).
+
+## Files
+
+- `index.html`: the whole game, inline
+- `vendor/`: PeerJS 1.5.5, unmodified (MIT, see `peerjs-LICENSE`), for playing together.
+  Playing alone works offline.

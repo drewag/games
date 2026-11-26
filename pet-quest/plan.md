@@ -94,9 +94,13 @@ Fluff Puff.
 - [x] Vroomba, Sprinkler, Bandit's gang
 - [x] World 6: Bandit's hideout
 - [x] World map
+- [x] Playing together: two iPads in one level through a room code, shared snacks and
+      enemies, each hero with their own friends
 
 ## Next
 
 - [ ] Play every level on the iPad with both heroes; tune `FEEL` and enemy speeds from
       what the kids actually do
 - [ ] Check `auto-update.js` reloads between levels on the installed home-screen app
+- [ ] Play together on two real iPads: check enemies look smooth on the guest and that
+      grabbing snacks feels fair

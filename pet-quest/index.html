@@ -21,6 +21,7 @@
 </head>
 <body>
 <canvas id="c"></canvas>
+<script src="vendor/peerjs.min.js"></script>
 <script>
 'use strict';
 
@@ -1246,6 +1247,12 @@ function chooseHero(who) {
 
 function startLevel(id, fromCheckpoint = true) {
   const def = LEVEL_BY_ID[id];
+  if (together()) {
+    // Together, both start at the beginning: checkpoints are each iPad's own.
+    if (net.host) { net.run++; send({ t: 'start', id, run: net.run }); }
+    Object.assign(net.other, { inLevel: true, done: false, quit: false, snacks: 0, p: null });
+    fromCheckpoint = false;
+  }
   G.lv = loadLevel(def);
   G.world = def.world;
   const lv = G.lv;
@@ -1298,6 +1305,278 @@ function makeEnemy(d) {
     }
   }
   return base;
+}
+
+// ---------------------------------------------------------------------------
+// Playing together: two iPads in one level (spec/play.md,
+// spec/details/network.md). They meet through PeerJS's free public server with
+// a four-letter room code, then talk directly. The host (the iPad that made
+// the room) runs the enemies and picks the levels.
+// ---------------------------------------------------------------------------
+const ROOM_PREFIX = 'pet-quest-room-';
+const CODE_LETTERS = 'ABCDEFGHJKMNPQRSTUVWXYZ'; // no I, L or O
+const net = {
+  peer: null, host: false, code: '', conn: null, heard: 0, sent: 0,
+  other: null,  // the other hero: { hero, p, inLevel, done, quit, snacks, x, y, fx, fy }
+  run: 0,       // which level start the in-level messages belong to
+  lootId: 0,
+  view: null, msg: '', typed: '', // the room panel
+};
+const r2 = (v) => Math.round(v * 100) / 100;
+const isGuest = () => !net.host && !!net.conn;
+const together = () => !!net.other;
+const otherName = () => (net.other ? SIDE[net.other.hero].name : '');
+const note = (text) => { G.note = { text, t: 3 }; };
+
+function send(msg) { if (net.conn && net.conn.open) net.conn.send(msg); }
+// In-level messages carry the level start they belong to.
+function sendLv(msg) { if (together()) { msg.r = net.run; send(msg); } }
+
+function makeRoom() {
+  leaveRoom();
+  net.host = true;
+  net.code = [...Array(4)].map(() => CODE_LETTERS[Math.floor(Math.random() * CODE_LETTERS.length)]).join('');
+  net.view = 'waiting';
+  net.peer = new Peer(ROOM_PREFIX + net.code);
+  net.peer.on('connection', acceptGuest);
+  net.peer.on('error', (e) => (e.type === 'unavailable-id' ? makeRoom() : netError(e)));
+}
+
+function listen(c) {
+  c.on('data', (m) => { if (c === net.conn) onMessage(m); });
+  c.on('close', () => { if (c === net.conn) otherLeft(); });
+  c.on('error', () => { if (c === net.conn) otherLeft(); });
+}
+
+function joinRoom(code) {
+  leaveRoom();
+  net.code = code;
+  net.view = 'joining';
+  net.peer = new Peer();
+  net.peer.on('open', () => {
+    const c = net.peer.connect(ROOM_PREFIX + code, { reliable: true });
+    c.on('open', () => { net.conn = c; net.heard = performance.now(); send({ t: 'hello', hero: G.hero, friends: G.save.friends }); });
+    listen(c);
+  });
+  net.peer.on('error', netError);
+}
+
+function netError(e) {
+  const msg = {
+    'peer-unavailable': `There's no room called ${net.code}. Check the code and try again.`,
+    busy: "That room is in a level right now. Try again when they're back on the map.",
+    full: 'That room already has two heroes.',
+  }[e.type] || (['network', 'server-error', 'socket-error'].includes(e.type)
+    ? "Couldn't reach the room server. Check the Wi-Fi and try again."
+    : 'Something went wrong connecting. Try again.');
+  leaveRoom();
+  net.view = 'error';
+  net.msg = msg;
+}
+
+function leaveRoom() {
+  send({ t: 'bye' });
+  const c = net.conn, p = net.peer;
+  Object.assign(net, { peer: null, host: false, conn: null, other: null, code: '', view: null });
+  if (c) c.close();
+  if (p) p.destroy();
+  if (G.state === 'wait') G.state = 'map';
+}
+
+// Host: a second iPad knocks. Only one at a time, and not mid-level.
+function acceptGuest(c) {
+  c.on('open', () => {
+    const why = net.conn ? 'full' : (G.state === 'play' || G.state === 'tally') ? 'busy' : null;
+    if (why) { c.send({ t: 'no', why }); setTimeout(() => c.close(), 500); return; }
+    net.conn = c;
+    net.heard = performance.now();
+  });
+  listen(c);
+}
+
+function newOther(hero, friends = 0) {
+  return { hero, friends, p: null, inLevel: false, done: false, quit: false, snacks: 0, x: 0, y: 0, fx: 0, fy: 0 };
+}
+
+// The other iPad left or went quiet. A host keeps the room open for someone
+// else; a guest carries on alone, running the enemies itself.
+function otherLeft() {
+  const name = otherName();
+  if (net.host) {
+    const c = net.conn;
+    net.conn = null; net.other = null;
+    if (c) c.close();
+    if (name) note(`${name} left`);
+  } else {
+    leaveRoom();
+    note('The room closed');
+  }
+}
+
+function onMessage(m) {
+  net.heard = performance.now();
+  if (m.r !== undefined && m.r !== net.run) return; // from an earlier level
+  const lv = G.lv;
+  const inLevel = lv && (G.state === 'play' || G.state === 'tally');
+  switch (m.t) {
+    case 'hello': {
+      // Two people can't be the same hero: a clash gets the other one.
+      const hero = m.hero === G.hero || !HEROES.includes(m.hero) ? HEROES.find((h) => h !== G.hero) : m.hero;
+      net.other = newOther(hero, m.friends);
+      net.view = null;
+      send({ t: 'room', host: G.hero, you: hero, friends: G.save.friends });
+      SFX.friend();
+      note(`${SIDE[hero].name} joined!`);
+      break;
+    }
+    case 'room':
+      net.other = newOther(m.host, m.friends);
+      G.hero = m.you; G.save = SAVES[m.you];
+      net.view = null;
+      G.state = 'wait';
+      SFX.friend();
+      break;
+    case 'no': netError({ type: m.why }); break;
+    case 'start': net.run = m.run; net.view = null; startLevel(m.id); break;
+    case 'lobby': if (G.state === 'play' || G.state === 'tally') { G.state = 'wait'; pointers.clear(); } break;
+    case 's': onState(m); break;
+    case 'take': {
+      const s = inLevel && lv.snacks[m.i];
+      if (s && !s.taken) { s.taken = true; if (onScreen(s.x)) burst(s.x, s.y, ['#ffffff', '#d8d4dc'], 4); }
+      break;
+    }
+    case 'takel': if (inLevel) G.loose = G.loose.filter((s) => s.id !== m.id); break;
+    case 'loot':
+      if (inLevel) for (const [id, kind, vx, vy] of m.list) G.loose.push({ id, kind, x: m.x, y: m.y, vx, vy, w: 0.4, hh: 0.4, t: 0, ground: false });
+      break;
+    case 'box': if (inLevel) remoteBox(m.tx, m.ty); break;
+    case 'tile': if (inLevel) remoteTile(m.tx, m.ty); break;
+    case 'kill': { const e = inLevel && G.enemies[m.i]; if (e && e.alive) defeat(e, m.text, true); break; }
+    case 'bhit': { const e = inLevel && G.enemies[m.i]; if (e && e.alive && e.boss && e.state === 'run') banditHit(e); break; }
+    case 'boss': {
+      if (!inLevel) break;
+      const e = G.enemies.find((x) => x.boss);
+      if (e) { e.state = 'flee'; e.lockT = G.time + 5; }
+      bossBeaten(e);
+      break;
+    }
+    case 'done':
+      if (net.other) Object.assign(net.other, { done: true, inLevel: false, snacks: m.snacks, quit: !!m.quit });
+      break;
+    case 'bye': otherLeft(); break;
+  }
+}
+
+// The other hero bumped a box: it's used up here too, but the snacks were theirs.
+function remoteBox(tx, ty) {
+  const c = tileAt(tx, ty);
+  if (c !== 'B' && c !== '?') return;
+  G.lv.bumps.set(`${tx},${ty}`, 0.18);
+  setTile(tx, ty, 'u');
+  if (onScreen(tx)) SFX.box();
+  if (c === 'B') for (let i = 0; i < 3; i++) {
+    G.items.push({ kind: SNACK_KINDS[(tx + i) % 4], x: tx + 0.5 + (i - 1) * 0.35, y: ty, vy: -9 - i * 1.5, vx: (i - 1) * 1.2, t: 0, snack: true });
+  }
+}
+
+// The other hero dug through soft dirt or smashed a cracked block.
+function remoteTile(tx, ty) {
+  const c = tileAt(tx, ty);
+  if (c !== ':' && c !== '%') return;
+  setTile(tx, ty, '.');
+  burst(tx + 0.5, ty + 0.5, c === ':' ? ['#7a5230', '#5c3c22', '#9a6a40'] : ['#b8b2aa', '#8a847c', '#ffffff'], 10);
+  if (onScreen(tx)) (c === ':' ? SFX.dig : SFX.smash)();
+}
+
+// What our hero looks like right now, for the other iPad to draw:
+// [x, y, pose, frame, flip, rot, blink, zoom, floating, snacks, out,
+//  follower idx, follower x, y, face, frame]
+function heroNetState() {
+  const h = G.h, f = G.follower, ps = heroPose(h);
+  const out = G.state !== 'play' || G.dying > 0 ? 1 : 0;
+  return [r2(h.x), r2(h.y), ps.pose, ps.frame, ps.flip ? 1 : 0, r2(ps.rot), h.blink > 0 ? 1 : 0, G.run.zoom > 0 ? 1 : 0,
+    h.floating ? 1 : 0, G.run.snacks, out,
+    f ? f.idx : -1, f ? r2(f.x) : 0, f ? r2(f.y) : 0, f ? f.face : 1, f && f.moving ? 1 + (Math.floor(f.phase) % 2) : 0];
+}
+
+function onState(m) {
+  const o = net.other;
+  if (!o) return;
+  const p = m.p;
+  // Snap the first time and after a teleport (respawn); otherwise glide.
+  if (!o.p || p[10] || Math.abs(p[0] - o.x) > 3 || Math.abs(p[1] - o.y) > 3) { o.x = p[0]; o.y = p[1]; o.fx = p[12]; o.fy = p[13]; }
+  o.p = p;
+  o.snacks = p[9];
+  if (m.en && isGuest() && G.lv && (G.state === 'play' || G.state === 'tally')) applyEnemies(m.en);
+}
+
+// Guest: the host's enemies. Any enemy missing from the list is gone.
+function applyEnemies(list) {
+  const seen = new Set();
+  for (const [i, x, y, vx, vy, dir, t, ground, st, hp, carry, spray] of list) {
+    const e = G.enemies[i];
+    if (!e || !e.alive) continue;
+    seen.add(i);
+    if (e.nx === undefined || Math.abs(x - e.x) > 3 || Math.abs(y - e.y) > 3) { e.x = x; e.y = y; }
+    Object.assign(e, { nx: x, ny: y, vx, vy, dir, t, ground: !!ground, carry, awake: true });
+    if (e.kind === 'sprinkler') {
+      if (!e.spray && spray && Math.abs(e.x - G.h.x) < viewTiles().vw) SFX.splash();
+      e.spray = spray;
+    }
+    if (st && G.time >= (e.lockT || 0)) {
+      if (e.boss && e.state === 'wait' && st === 'taunt') {
+        G.banner = { text: 'Bandit!', sub: 'Stomp him three times!', t: 2.2 };
+        SFX.boss();
+      }
+      e.state = st;
+    }
+    if (e.boss) e.hp = hp;
+  }
+  G.enemies.forEach((e, i) => { if (!seen.has(i)) e.alive = false; });
+}
+
+// The other hero glides toward where they last said they were.
+function updateOther(dt) {
+  const o = net.other;
+  if (!o || !o.p) return;
+  const k = Math.min(1, dt * 15);
+  o.x += (o.p[0] - o.x) * k; o.y += (o.p[1] - o.y) * k;
+  o.fx += (o.p[12] - o.fx) * k; o.fy += (o.p[13] - o.fy) * k;
+}
+
+// About 15 times a second while in a level: where our hero is, and (host)
+// every enemy. A little "hi" otherwise, so silence means someone's gone.
+function netTick(now) {
+  if (!net.conn) return;
+  if (now - net.heard > 6000) { otherLeft(); return; }
+  const inLevel = G.lv && (G.state === 'play' || G.state === 'tally');
+  if (now - net.sent < (inLevel ? 66 : 1000)) return;
+  net.sent = now;
+  if (!inLevel || !together()) { send({ t: 'hi' }); return; }
+  const msg = { t: 's', p: heroNetState() };
+  if (net.host) {
+    msg.en = [];
+    G.enemies.forEach((e, i) => {
+      if (e.alive) msg.en.push([i, r2(e.x), r2(e.y), r2(e.vx), r2(e.vy), e.dir, r2(e.t), e.ground ? 1 : 0, e.state || 0, e.hp || 0, e.carry || 0, r2(e.spray || 0)]);
+    });
+  }
+  sendLv(msg);
+}
+
+// Leaving a level by the back button. The host takes the guest along; the
+// guest drops out of this level and waits for the next.
+function leaveLevel() {
+  pointers.clear();
+  if (isGuest() && together()) {
+    sendLv({ t: 'done', snacks: G.run.snacks, quit: true });
+    G.state = 'wait';
+    return;
+  }
+  toLevels('levels');
+}
+function toLevels(state) {
+  if (net.host && together()) send({ t: 'lobby' });
+  G.state = state;
 }
 
 // ---------------------------------------------------------------------------
@@ -1554,6 +1833,7 @@ function updateHero(dt) {
       if (h.digT > 0.18) {
         h.digT = 0;
         setTile(tx, ty, '.');
+        sendLv({ t: 'tile', tx, ty });
         SFX.dig();
         burst(tx + 0.5, ty + 0.5, ['#7a5230', '#5c3c22', '#9a6a40'], 10);
         if (tx !== Math.floor(h.x)) h.x = tx + 0.5;
@@ -1590,6 +1870,7 @@ function poundLand() {
   for (let tx = tx0; tx <= tx1; tx++) {
     if (tileAt(tx, ty) === '%') {
       setTile(tx, ty, '.');
+      sendLv({ t: 'tile', tx, ty });
       burst(tx + 0.5, ty + 0.5, ['#b8b2aa', '#8a847c', '#ffffff'], 14);
       smashed = true;
     }
@@ -1628,6 +1909,7 @@ function bumpBox(tx, ty, c) {
   const lv = G.lv;
   lv.bumps.set(`${tx},${ty}`, 0.18);
   setTile(tx, ty, 'u');
+  sendLv({ t: 'box', tx, ty });
   SFX.box();
   const x = tx + 0.5, y = ty;
   if (c === 'B') {
@@ -1686,8 +1968,9 @@ function restartAtCheckpoint() {
   const h = G.h;
   Object.assign(h, makeHero(run.cp.x, run.cp.y));
   h.blink = FEEL.safeTime;
-  G.loose = []; G.items = [];
-  spawnEnemies();
+  G.items = [];
+  // Playing together the level is shared, so it carries on as it is.
+  if (!together()) { G.loose = []; spawnEnemies(); }
   G.trail = [];
   if (G.follower) { G.follower.x = h.x - 1; G.follower.y = h.y; }
   snapCamera();
@@ -1715,18 +1998,25 @@ function overlap(a, e, shrink = 0.08) {
   return a.x1 > e.x - e.w / 2 + shrink && a.x0 < e.x + e.w / 2 - shrink && a.y1 > e.y - e.hh + shrink && a.y0 < e.y - shrink;
 }
 
-function defeat(e, text = 'Poof!') {
+// `remote`: the other iPad defeated it and told us.
+function defeat(e, text = 'Poof!', remote = false) {
   e.alive = false;
-  SFX.poof();
+  if (!remote || onScreen(e.x)) SFX.poof();
   burst(e.x, e.y - e.hh / 2, ['#ffffff', '#e8e8f0', '#ffcf3f'], 16);
   pop(text, e.x, e.y - e.hh - 0.3, '#ff4f9a');
-  if (e.carry) dropLoot(e.x, e.y - e.hh / 2, e.carry);
+  // The host drops the loot for both iPads.
+  if (e.carry && !isGuest()) dropLoot(e.x, e.y - e.hh / 2, e.carry);
+  if (!remote) sendLv({ t: 'kill', i: G.enemies.indexOf(e), text });
 }
 
 function dropLoot(x, y, n) {
+  const list = [];
   for (let i = 0; i < n; i++) {
-    G.loose.push({ kind: SNACK_KINDS[i % 4], x, y, vx: rand(-3, 3), vy: rand(-9, -5), w: 0.4, hh: 0.4, t: 0, ground: false });
+    const s = { id: ++net.lootId, kind: SNACK_KINDS[i % 4], x, y, vx: rand(-3, 3), vy: rand(-9, -5), w: 0.4, hh: 0.4, t: 0, ground: false };
+    G.loose.push(s);
+    list.push([s.id, s.kind, r2(s.vx), r2(s.vy)]);
   }
+  sendLv({ t: 'loot', x: r2(x), y: r2(y), list });
 }
 
 function patrol(e, dt, speed) {
@@ -1744,16 +2034,38 @@ function fall(e, dt) {
   e.vy = Math.min(FEEL.maxFall, e.vy + gravityUp() * FEEL.fallMult * dt);
 }
 
-function updateEnemies(dt) {
-  const h = G.h, { vw } = viewTiles();
-  const hb = heroBox();
+// The heroes enemies react to: ours, and the other iPad's while it's in the level.
+function heroesInLevel() {
+  const list = [];
+  if (G.state === 'play' && G.finish <= 0 && G.dying <= 0) list.push(G.h);
+  const o = net.other;
+  if (o && o.inLevel && o.p && !o.p[10]) list.push({ x: o.p[0], y: o.p[1] });
+  return list;
+}
+function nearestHero(e) {
+  let best = G.h, bd = Infinity;
+  for (const h of heroesInLevel()) {
+    const d = Math.abs(h.x - e.x) + Math.abs(h.y - e.y) * 0.5;
+    if (d < bd) { bd = d; best = h; }
+  }
+  return best;
+}
+
+// Moves the enemies. Playing together, the host runs them and the guest
+// follows what the host sends.
+function updateEnemyAI(dt) {
+  const { vw } = viewTiles();
+  const near = (x, camX) => x < camX + vw + 1.5 && x > camX - 3;
+  const o = net.other;
   for (const e of G.enemies) {
     if (!e.alive) continue;
-    // Enemies start moving once they're nearly on screen.
+    if (isGuest()) { followNet(e, dt); continue; }
+    // Enemies start moving once they're nearly on someone's screen.
     if (!e.awake) {
-      if (e.x < G.cam.x + vw + 1.5 && e.x > G.cam.x - 3) e.awake = true;
+      if (near(e.x, G.cam.x) || (o && o.inLevel && o.p && near(e.x, o.p[0] - vw * 0.42))) e.awake = true;
       else continue;
     }
+    const h = nearestHero(e);
     e.t += dt;
     switch (e.kind) {
       case 'dust':
@@ -1797,24 +2109,44 @@ function updateEnemies(dt) {
         const cyc = e.t % 3.8;
         const was = e.spray;
         e.spray = cyc < 1.8 ? Math.min(1, cyc / 0.3) : 0;
-        if (!was && e.spray && Math.abs(e.x - h.x) < vw) SFX.splash();
-        if (e.spray > 0) {
-          // water arcs both ways; touching the drops hurts
-          for (const s of [-1, 1]) for (let u = 0.08; u <= 1; u += 0.08) {
-            const [wx, wy] = sprayPoint(e, s, u);
-            if (wx > hb.x0 - 0.15 && wx < hb.x1 + 0.15 && wy > hb.y0 - 0.15 && wy < hb.y1) { hurt(e.x); break; }
-          }
-        }
+        if (!was && e.spray && Math.abs(e.x - G.h.x) < vw) SFX.splash();
         break;
       }
-      case 'raccoon': updateRaccoon(e, dt); break;
-      case 'bandit': updateBandit(e, dt); break;
+      case 'raccoon': updateRaccoon(e, dt, h); break;
+      case 'bandit': updateBandit(e, dt, h); break;
     }
-    if (e.y > G.lv.rows + 2) { e.alive = false; continue; }
-    if (e.kind === 'sprinkler') continue;
+    if (e.y > G.lv.rows + 2) e.alive = false;
+  }
+}
 
-    // Touching the hero
+// Guest: glide toward where the host last said each enemy was.
+function followNet(e, dt) {
+  if (e.nx === undefined) return;
+  e.t += dt;
+  e.nx += e.vx * dt;
+  if (!e.ground) e.ny += e.vy * dt;
+  const k = Math.min(1, dt * 12);
+  e.x += (e.nx - e.x) * k;
+  e.y += (e.ny - e.y) * k;
+  if (e.kind === 'dust') e.roll += e.vx * dt / 0.35;
+}
+
+// Our hero touching enemies and sprinkler water.
+function touchEnemies() {
+  const h = G.h;
+  const hb = heroBox();
+  for (const e of G.enemies) {
     if (!e.alive || G.dying > 0) continue;
+    if (e.kind === 'sprinkler') {
+      if (e.spray > 0) {
+        // water arcs both ways; touching the drops hurts
+        for (const s of [-1, 1]) for (let u = 0.08; u <= 1; u += 0.08) {
+          const [wx, wy] = sprayPoint(e, s, u);
+          if (wx > hb.x0 - 0.15 && wx < hb.x1 + 0.15 && wy > hb.y0 - 0.15 && wy < hb.y1) { hurt(e.x); break; }
+        }
+      }
+      continue;
+    }
     if (!overlap(hb, e)) continue;
     const falling = h.vy > 0 || h.pound === 'drop';
     // Stomp: falling onto the enemy's top half (generous on purpose).
@@ -1846,8 +2178,7 @@ function sprayPoint(e, s, u) {
 }
 
 // Bandit's gang: grab snacks lying around and run off with them.
-function updateRaccoon(e, dt) {
-  const h = G.h;
+function updateRaccoon(e, dt, h) {
   fall(e, dt);
   e.stateT -= dt;
   if (e.state === 'walk') {
@@ -1863,6 +2194,7 @@ function updateRaccoon(e, dt) {
       patrol(e, dt, 2.6);
       if (Math.abs(target.x - e.x) < 0.4) {
         target.taken = true; target.stolen = true;
+        sendLv({ t: 'take', i: G.lv.snacks.indexOf(target) });
         e.carry++;
         SFX.grab();
         pop('Mine!', e.x, e.y - e.hh - 0.3, '#5f5b66');
@@ -1876,8 +2208,7 @@ function updateRaccoon(e, dt) {
 }
 
 // Bandit: runs back and forth and hops; three stomps and he drops the snacks.
-function updateBandit(e, dt) {
-  const h = G.h;
+function updateBandit(e, dt, h) {
   fall(e, dt);
   e.stateT -= dt;
   switch (e.state) {
@@ -1920,25 +2251,41 @@ function updateBandit(e, dt) {
 function banditTouch(e, stomp) {
   if (e.state === 'flee' || e.state === 'wait' || e.state === 'taunt') return;
   if (stomp && e.state !== 'dizzy') {
-    e.hp--;
     stompBounce(FEEL.stomp + 1);
     SFX.stomp();
     G.shake = 0.2;
-    burst(e.x, e.y - e.hh, ['#ffcf3f', '#ffffff'], 14);
-    if (e.hp <= 0) {
-      e.state = 'flee'; e.stateT = 2.5;
-      pop('Okay, okay!', e.x, e.y - e.hh - 0.5, '#5f5b66');
-      dropLoot(e.x, e.y - e.hh, BOSS_LOOT);
-      G.lv.bossDone = true;
-      SFX.friend();
-      G.banner = { text: 'Bandit ran off!', sub: 'The garden gate is open', t: 2.4 };
-    } else {
-      e.state = 'dizzy'; e.stateT = 1.3;
-      pop(['Hey!', 'Ow!'][2 - e.hp] || 'Hey!', e.x, e.y - e.hh - 0.4, '#5f5b66');
-    }
+    if (isGuest()) {
+      // The host keeps Bandit's hearts. Look dizzy until it answers.
+      sendLv({ t: 'bhit', i: G.enemies.indexOf(e) });
+      e.state = 'dizzy'; e.lockT = G.time + 0.6;
+      burst(e.x, e.y - e.hh, ['#ffcf3f', '#ffffff'], 14);
+      pop('Hey!', e.x, e.y - e.hh - 0.4, '#5f5b66');
+    } else banditHit(e);
   } else if (e.state !== 'dizzy') {
     hurt(e.x);
   }
+}
+
+// One stomp on Bandit, from either hero. Runs on the host (or alone).
+function banditHit(e) {
+  e.hp--;
+  burst(e.x, e.y - e.hh, ['#ffcf3f', '#ffffff'], 14);
+  if (e.hp <= 0) {
+    e.state = 'flee'; e.stateT = 2.5;
+    dropLoot(e.x, e.y - e.hh, BOSS_LOOT);
+    sendLv({ t: 'boss' });
+    bossBeaten(e);
+  } else {
+    e.state = 'dizzy'; e.stateT = 1.3;
+    pop(['Hey!', 'Ow!'][2 - e.hp] || 'Hey!', e.x, e.y - e.hh - 0.4, '#5f5b66');
+  }
+}
+
+function bossBeaten(e) {
+  if (e) pop('Okay, okay!', e.x, e.y - e.hh - 0.5, '#5f5b66');
+  G.lv.bossDone = true;
+  SFX.friend();
+  G.banner = { text: 'Bandit ran off!', sub: 'The garden gate is open', t: 2.4 };
 }
 
 // ---------------------------------------------------------------------------
@@ -1947,22 +2294,21 @@ function banditTouch(e, stomp) {
 function updatePickups(dt) {
   const h = G.h, hb = heroBox();
   const near = (x, y, r = 0.35) => x > hb.x0 - r && x < hb.x1 + r && y > hb.y0 - r && y < hb.y1 + r;
-  for (const s of G.lv.snacks) {
-    if (s.taken) continue;
+  G.lv.snacks.forEach((s, i) => {
+    if (s.taken) return;
     if (near(s.x, s.y)) {
       s.taken = true;
+      sendLv({ t: 'take', i });
       SFX.snack();
       burst(s.x, s.y, ['#ffcf3f', '#ffffff', '#f4a6c4'], 6);
       addSnacks(1);
     }
-  }
+  });
   for (let i = G.loose.length - 1; i >= 0; i--) {
     const s = G.loose[i];
-    s.t += dt;
-    if (!s.ground) { s.vy = Math.min(12, s.vy + 40 * dt); moveBody(s, dt); if (s.ground) s.vx = 0; }
-    if (s.y > G.lv.rows + 1) { G.loose.splice(i, 1); continue; }
     if (s.t > 0.35 && near(s.x, s.y - 0.2)) {
       G.loose.splice(i, 1);
+      sendLv({ t: 'takel', id: s.id });
       SFX.snack();
       addSnacks(1);
     }
@@ -2102,6 +2448,10 @@ function pop(text, x, y, color) { G.pops.push({ text, x, y, color, life: 1 }); }
 function update(dt) {
   G.time += dt;
   if (G.state === 'play') updatePlay(dt);
+  // The host keeps the level going for the other hero after finishing.
+  else if (G.state === 'tally' && net.host && together() && net.other.inLevel) updateWorld(dt);
+  if (G.note) { G.note.t -= dt; if (G.note.t <= 0) G.note = null; }
+  updateOther(dt);
   for (let i = G.parts.length - 1; i >= 0; i--) {
     const p = G.parts[i];
     p.life -= dt;
@@ -2118,12 +2468,25 @@ function update(dt) {
   }
 }
 
+// The shared part of a level: enemies, loose snacks, bumped boxes.
+function updateWorld(dt) {
+  for (const [k, v] of G.lv.bumps) { if (v - dt <= 0) G.lv.bumps.delete(k); else G.lv.bumps.set(k, v - dt); }
+  updateEnemyAI(dt);
+  for (let i = G.loose.length - 1; i >= 0; i--) {
+    const s = G.loose[i];
+    s.t += dt;
+    if (!s.ground) { s.vy = Math.min(12, s.vy + 40 * dt); moveBody(s, dt); if (s.ground) s.vx = 0; }
+    if (s.y > G.lv.rows + 1) G.loose.splice(i, 1);
+  }
+}
+
 function updatePlay(dt) {
   readInput();
   G.intro = Math.max(0, G.intro - dt);
   G.shake = Math.max(0, G.shake - dt);
   if (G.banner) { G.banner.t -= dt; if (G.banner.t <= 0) G.banner = null; }
-  for (const [k, v] of G.lv.bumps) { if (v - dt <= 0) G.lv.bumps.delete(k); else G.lv.bumps.set(k, v - dt); }
+  // Playing together, the level keeps going while we pause.
+  if ((G.freeze > 0 || G.dying > 0) && together()) updateWorld(dt);
 
   if (G.freeze > 0) {
     G.freeze -= dt;
@@ -2144,8 +2507,9 @@ function updatePlay(dt) {
     if (Math.random() < dt * 30) sparkle(G.h.x + rand(-0.4, 0.4), G.h.y - rand(0, G.h.hh), ['#ffcf3f', '#ffffff', '#ff7eb6', '#7ec8e3']);
   }
   updateHero(dt);
+  updateWorld(dt);
   if (G.dying <= 0) {
-    updateEnemies(dt);
+    touchEnemies();
     updatePickups(dt);
   }
   updateFollower(dt);
@@ -2165,7 +2529,8 @@ function finishLevel() {
   s.snacks[lv.id] = Math.max(prevBest, G.run.snacks);
   if (s.cp && s.cp.id === lv.id) s.cp = null;
   writeSave();
-  G.tally = { snacks: G.run.snacks, total: lv.total, best: s.snacks[lv.id], newBest: G.run.snacks > prevBest && !first, t: 0, first };
+  sendLv({ t: 'done', snacks: G.run.snacks });
+  G.tally = { snacks: G.run.snacks, total: lv.total, best: s.snacks[lv.id], newBest: G.run.snacks > prevBest && !first, t: 0, first, together: together() };
   G.state = 'tally';
 }
 
@@ -2645,6 +3010,10 @@ function drawSelect() {
     friendRow(save, x + cw / 2, spriteBottom + nameSize * 1.7 + petPx * 14, petPx);
     const done = LEVELS.filter(l => save.done[l.id]).length;
     handText(done ? `${done} of ${LEVELS.length} levels` : 'New adventure!', x + cw / 2, spriteBottom + nameSize * 2.3 + petPx * 14, Math.min(20, nameSize * 0.6), '#6d6a70');
+    if (together() && net.other.hero === who) {
+      handText('In the room', x + cw / 2, y + ch - 18, Math.min(20, nameSize * 0.6), '#a58ad8');
+      return;
+    }
     G.buttons.push({ x, y, w: cw, h: ch, action: () => chooseHero(who) });
   });
 }
@@ -2915,20 +3284,25 @@ function drawEnemies() {
   }
 }
 
-function drawHero() {
-  const h = G.h;
-  if (G.dying > 0) return;
-  if (h.blink > 0 && Math.floor(G.time * 12) % 2 === 0) return;
+function heroPose(h) {
   let pose = 'idle', frame = 0, flip = h.face < 0;
   if (h.pound) pose = 'jump';
   else if (h.cling) { pose = 'fall'; flip = h.cling > 0; }
   else if (!h.ground) pose = h.vy < 2 || h.floating ? 'jump' : 'fall';
   else if (Math.abs(h.vx) > 0.3) { pose = 'walk'; frame = Math.floor(h.phase * WALK_FRAMES) % WALK_FRAMES; }
+  const rot = h.pound === 'hang' ? (1 - h.poundT / 0.12) * TAU * (h.face) : 0;
+  return { pose, frame, flip, rot };
+}
+
+function drawHero() {
+  const h = G.h;
+  if (G.dying > 0) return;
+  if (h.blink > 0 && Math.floor(G.time * 12) % 2 === 0) return;
+  const { pose, frame, flip, rot } = heroPose(h);
   const s = heroSprite(G.hero, pose, frame);
   const [sx, sy] = toScreen(h.x, h.y);
   const sq = h.landSq;
   const dig = h.digT > 0 ? Math.sin(G.time * 60) * P : 0;
-  let rot = h.pound === 'hang' ? (1 - h.poundT / 0.12) * TAU * (h.face) : 0;
   if (G.run.zoom > 0) {
     ctx.save();
     ctx.globalAlpha = 0.3;
@@ -2941,6 +3315,46 @@ function drawHero() {
     ctx.save(); ctx.globalAlpha = 0.6; ctx.fillStyle = FRIENDS[4].c;
     ctx.beginPath(); ctx.arc(sx, sy - h.hh * T - T * 0.1, T * 0.6, Math.PI, 0); ctx.fill(); ctx.restore();
   }
+}
+
+// The other iPad's hero and their own friend, with their name on top. When
+// they're off screen, a tag at the edge points the way.
+function drawOther() {
+  const o = net.other;
+  if (!o || !o.p || !o.inLevel || o.p[10]) return;
+  const p = o.p, who = o.hero;
+  if (p[11] >= 0) {
+    const [fx, fy] = toScreen(o.fx, o.fy);
+    drawSprite(petSprite(FRIENDS[p[11]].pet, P, p[14], p[15]), fx, fy + (p[15] ? -P * 2 : 0), { bottom: true });
+  }
+  const { vw } = viewTiles();
+  const [sx, sy] = toScreen(o.x, o.y);
+  const color = SIDE[who].color, size = Math.max(14, T * 0.38);
+  if (o.x < G.cam.x - 0.3 || o.x > G.cam.x + vw + 0.3) {
+    const left = o.x < G.cam.x;
+    const ex = left ? safeLeft + 30 : W - safeRight - 30;
+    const ey = clamp(sy - T, safeTop + 90, H - safeBottom - 150);
+    ctx.save();
+    ctx.fillStyle = color; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 3;
+    const d = left ? -1 : 1;
+    ctx.beginPath(); ctx.moveTo(ex + d * 16, ey); ctx.lineTo(ex - d * 2, ey - 13); ctx.lineTo(ex - d * 2, ey + 13); ctx.closePath();
+    ctx.fill(); ctx.stroke(); ctx.restore();
+    outlinedText(SIDE[who].name, ex - d * 10, ey + 26, size, color, { align: left ? 'left' : 'right', stroke: '#ffffff' });
+    return;
+  }
+  if (p[6] && Math.floor(G.time * 12) % 2 === 0) return;
+  const s = heroSprite(who, p[2], p[3]);
+  if (p[7]) {
+    ctx.save(); ctx.globalAlpha = 0.3;
+    drawSprite(s, sx - (p[4] ? -1 : 1) * T * 0.5, sy, { bottom: true, flip: !!p[4] });
+    ctx.restore();
+  }
+  drawSprite(s, sx, sy, { bottom: true, flip: !!p[4], rot: p[5] });
+  if (p[8]) {
+    ctx.save(); ctx.globalAlpha = 0.6; ctx.fillStyle = FRIENDS[4].c;
+    ctx.beginPath(); ctx.arc(sx, sy - SIDE[who].box[1] / TILE * T - T * 0.1, T * 0.6, Math.PI, 0); ctx.fill(); ctx.restore();
+  }
+  outlinedText(SIDE[who].name, sx, sy - SIDE[who].box[1] / TILE * T - T * 0.45, size, color, { stroke: '#ffffff' });
 }
 
 function drawFollower() {
@@ -2978,6 +3392,10 @@ function drawHud() {
   const x = safeLeft + 12 + 52 + 16;
   drawSprite(ss, x + sw(ss) / 2, top + 26);
   outlinedText(String(run.snacks), x + sw(ss) + 10, top + 27, Math.min(40, Math.max(24, H * 0.05)), G.lv.theme.dark ? '#ffcf3f' : '#1e4fa3', { align: 'left' });
+  if (together()) {
+    const o = net.other;
+    outlinedText(`${otherName()}: ${o.snacks}${o.done ? (o.quit ? ' (left)' : ' (done)') : ''}`, x, top + 66, Math.min(24, Math.max(16, H * 0.032)), SIDE[o.hero].color, { align: 'left', stroke: '#ffffff' });
+  }
   // hearts
   for (let i = 0; i < 3; i++) {
     const hs = snackSprite(i < run.hearts ? 'heart' : 'heartEmpty', L.hudPx);
@@ -3081,14 +3499,15 @@ function drawPlay() {
   drawTiles();
   drawSnacks();
   drawEnemies();
+  drawOther();
   drawFollower();
   drawHero();
   drawParticles();
   if (G.state === 'play') {
-    iconButton(safeLeft + 12, safeTop + 12, 52, 'back', () => { G.state = 'levels'; pointers.clear(); });
+    iconButton(safeLeft + 12, safeTop + 12, 52, 'back', leaveLevel);
     drawHud();
     drawTouchButtons();
-    if (G.intro > 0) drawBanner(`${G.lv.id}  ${G.lv.def.name}`, null, G.intro, '#ffffff');
+    if (G.intro > 0) drawBanner(`${G.lv.id}  ${G.lv.def.name}`, together() ? `Who gets more snacks, you or ${otherName()}?` : null, G.intro, '#ffffff');
     if (G.banner) drawBanner(G.banner.text, G.banner.sub, G.banner.t);
     if (G.meet) drawMeet();
     if (G.dying > 0) {
@@ -3103,6 +3522,7 @@ function drawTally() {
   const t = G.tally;
   ctx.fillStyle = 'rgba(251, 248, 241, 0.7)';
   ctx.fillRect(0, 0, W, H);
+  if (t.together && together()) { drawTallyTogether(t); return; }
   const pw = Math.min(W * 0.9, 460), bh = Math.min(58, H * 0.11);
   const ph = Math.min(H - safeTop - safeBottom - 20, bh * 2 + 16 + 230);
   const px = (W - pw) / 2, py = Math.max(safeTop + 10, (H - ph) / 2);
@@ -3135,13 +3555,169 @@ function drawTally() {
   }
 }
 
+// Level clear, playing together: both heroes' snacks side by side.
+function drawTallyTogether(t) {
+  const o = net.other;
+  const pw = Math.min(W * 0.92, 560), bh = Math.min(58, H * 0.11);
+  const ph = Math.min(H - safeTop - safeBottom - 20, bh * 2 + 16 + 290);
+  const px = (W - pw) / 2, py = Math.max(safeTop + 10, (H - ph) / 2);
+  card(px, py, pw, ph, { r: 22 });
+  let y = py + 36;
+  outlinedText('Level clear!', W / 2, y, Math.min(40, pw * 0.08), '#f3c623');
+  y += 36;
+  handText(`${G.lv.id}  ${G.lv.def.name}`, W / 2, y, Math.min(22, pw * 0.05), '#6d6a70');
+  y += 24;
+  const fpx = Math.max(2, Math.floor(Math.min(H * 0.17, 110) / 30));
+  const rows = [[G.hero, t.snacks, true], [o.hero, o.snacks, o.done]];
+  rows.forEach(([who, n, done], i) => {
+    const cx = W / 2 + (i ? 1 : -1) * pw * 0.24;
+    const bottom = y + fpx * 30;
+    drawSprite(sprite('front-' + who, FRONT[who], fpx, HERO_PAL), cx, bottom, { bottom: true });
+    outlinedText(SIDE[who].name, cx, bottom + 18, 22, SIDE[who].color);
+    const shown = i ? n : Math.min(n, Math.floor(t.t * 40));
+    outlinedText(String(shown), cx, bottom + 52, 36, '#1e4fa3');
+    if (!done) handText('still playing…', cx, bottom + 80, 18, '#6d6a70');
+  });
+  y += fpx * 30 + 100;
+  let line = '';
+  if (o.done && t.t > 1) {
+    if (o.quit) line = `${otherName()} left the level`;
+    else if (t.snacks === o.snacks) line = "It's a tie!";
+    else line = `${SIDE[t.snacks > o.snacks ? G.hero : o.hero].name} got the most snacks!`;
+  }
+  handText(line, W / 2, y, 24, '#ff4f9a');
+  y += 26;
+  const bw = pw - 48;
+  if (isGuest()) { handText(`${otherName()} picks what's next`, W / 2, y + bh / 2, 22, '#6d6a70'); return; }
+  if (!o.done) { handText(`Waiting for ${otherName()}…`, W / 2, y + bh / 2, 22, '#6d6a70'); return; }
+  if (t.t <= 0.6) return;
+  const lvls = worldLevels(G.lv.def.world);
+  const next = lvls.find(l => l.n === G.lv.def.n + 1) || LEVELS.find(l => l.world === G.lv.def.world + 1 && l.n === 1);
+  if (next) button('Next level', (W - bw) / 2, y, bw, bh, '#4caf50', () => startLevel(next.id));
+  else button('World map', (W - bw) / 2, y, bw, bh, '#4caf50', () => toLevels('map'));
+  const half = (bw - 12) / 2;
+  button('Again', (W - bw) / 2, y + bh + 14, half, bh, '#a58ad8', () => startLevel(G.lv.id, false));
+  button('Levels', (W - bw) / 2 + half + 12, y + bh + 14, half, bh, '#7ec8e3', () => toLevels('levels'));
+}
+
+// Guest: in the room, waiting for the host to pick a level.
+function drawWait() {
+  drawPaper();
+  iconButton(safeLeft + 12, safeTop + 12, 52, 'back', leaveRoom);
+  outlinedText(`Room ${net.code}`, W / 2, safeTop + 44, Math.min(44, W * 0.05), '#1e4fa3');
+  const o = net.other;
+  if (!o) return;
+  const fpx = Math.max(2, Math.floor(Math.min(H * 0.4, 260) / 30));
+  [o.hero, G.hero].forEach((who, i) => {
+    const cx = W / 2 + (i ? 1 : -1) * Math.min(W * 0.18, 200);
+    const bottom = H * 0.2 + fpx * 30;
+    const bob = Math.sin(G.time * 4 + i * 2) * 3;
+    drawSprite(sprite('front-' + who, FRONT[who], fpx, HERO_PAL), cx, bottom + bob, { bottom: true });
+    outlinedText(SIDE[who].name, cx, bottom + 30, Math.min(34, W * 0.04), SIDE[who].color);
+    friendRow(i ? G.save : { friends: o.friends || 0 }, cx, bottom + 80, Math.max(1.5, Math.round(fpx / 3)));
+  });
+  handText(`${otherName()} is picking a level…`, W / 2, H - safeBottom - 40, Math.min(28, H * 0.055));
+}
+
+// Map and level screens: start a room, or show who's in it.
+function drawRoomBadge() {
+  const h = 52, y = safeTop + 12;
+  const small = W < 900;
+  if (!net.peer) {
+    const w = small ? 150 : 200;
+    button('Play together', W - safeRight - 12 - w, y, w, h, '#a58ad8', () => { net.view = 'menu'; });
+    return;
+  }
+  const w = small ? 92 : 110;
+  button('Leave', W - safeRight - 12 - w, y, w, h, '#9a96a0', leaveRoom);
+  const text = together() ? `Room ${net.code} · with ${otherName()}` : `Room ${net.code} · waiting…`;
+  outlinedText(text, W - safeRight - 24 - w, y + h + 22, small ? 16 : 20, '#a58ad8', { align: 'right', stroke: '#ffffff' });
+}
+
+// The room panel, over whatever screen is showing.
+function drawNetPanel() {
+  ctx.fillStyle = 'rgba(42, 34, 40, 0.45)';
+  ctx.fillRect(0, 0, W, H);
+  const v = net.view;
+  const pw = Math.min(W * 0.92, 560);
+  const bh = Math.min(56, H * 0.11);
+  const key = v === 'join' ? Math.floor(Math.min(56, (pw - 40) / 8 - 6, (H - safeTop - safeBottom - bh * 2 - 150) / 3 - 6)) : 0;
+  const ph = v === 'join' ? 120 + (key + 6) * 3 + bh + 30 : v === 'menu' ? 120 + bh * 3 + 40 : v === 'waiting' ? 250 + bh : v === 'error' ? 200 + bh : 120 + bh;
+  const px = (W - pw) / 2, py = Math.max(safeTop + 6, (H - ph) / 2);
+  card(px, py, pw, ph, { r: 22 });
+  const bw = pw - 60, bx = (W - bw) / 2;
+  let y = py + 40;
+  const title = { menu: 'Play together', waiting: 'Your room code', join: 'Join a room', joining: `Joining ${net.code}…`, error: 'Oops' }[v];
+  outlinedText(title, W / 2, y, Math.min(36, pw * 0.07), '#a58ad8');
+  y += 40;
+  const close = () => { net.view = null; };
+  if (v === 'menu') {
+    handText('Two iPads in one level. Who gets more snacks?', W / 2, y, Math.min(20, pw * 0.04), '#6d6a70');
+    y += 24;
+    button('Make a room', bx, y, bw, bh, '#4caf50', makeRoom);
+    button('Join a room', bx, y + bh + 12, bw, bh, '#7ec8e3', () => { net.typed = ''; net.view = 'join'; });
+    button('Back', bx, y + (bh + 12) * 2, bw, bh, '#9a96a0', close);
+  } else if (v === 'waiting') {
+    outlinedText(net.code || '…', W / 2, y + 45, 80, '#1e4fa3');
+    handText('Type it on the other iPad.', W / 2, y + 115, 22, '#6d6a70');
+    button('Cancel', bx, y + 145, bw, bh, '#9a96a0', leaveRoom);
+  } else if (v === 'join') {
+    // four slots, then a letter pad
+    const slot = 54;
+    for (let i = 0; i < 4; i++) {
+      const sx = W / 2 + (i - 2) * (slot + 10) + 5;
+      card(sx, y - 18, slot, slot, { fill: '#fbf8f1', r: 10, lw: 2 });
+      if (net.typed[i]) outlinedText(net.typed[i], sx + slot / 2, y - 18 + slot / 2, 34, '#1e4fa3');
+    }
+    y += slot - 4;
+    const cols = 8, gx = (W - (cols * (key + 6) - 6)) / 2;
+    [...CODE_LETTERS, '⌫'].forEach((ch, i) => {
+      const kx = gx + (i % cols) * (key + 6), ky = y + Math.floor(i / cols) * (key + 6);
+      card(kx, ky, key, key, { fill: ch === '⌫' ? '#ffd7d2' : '#ffffff', r: 10, lw: 2 });
+      outlinedText(ch, kx + key / 2, ky + key / 2, key * 0.5, ch === '⌫' ? '#e53935' : '#3d3940', { stroke: '#ffffff' });
+      G.buttons.push({ x: kx, y: ky, w: key, h: key, action: () => typeCode(ch) });
+    });
+    y += (key + 6) * 3 + 8;
+    const half = (bw - 12) / 2;
+    button('Join', bx, y, half, bh, net.typed.length === 4 ? '#4caf50' : '#b8d8b0', () => { if (net.typed.length === 4) joinRoom(net.typed); });
+    button('Back', bx + half + 12, y, half, bh, '#9a96a0', close);
+  } else if (v === 'joining') {
+    button('Cancel', bx, y, bw, bh, '#9a96a0', leaveRoom);
+  } else if (v === 'error') {
+    ctx.save();
+    ctx.font = `${Math.min(22, pw * 0.045)}px ${HAND_FONT}`;
+    ctx.fillStyle = '#3d3940'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    wrapText(net.msg, W / 2, y + 30, bw, 28);
+    ctx.restore();
+    button('OK', bx, y + 90, bw, bh, '#4caf50', close);
+  }
+}
+
+function typeCode(ch) {
+  if (ch === '⌫') net.typed = net.typed.slice(0, -1);
+  else if (net.typed.length < 4 && CODE_LETTERS.includes(ch)) net.typed += ch;
+}
+
+function drawNote() {
+  const n = G.note;
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, n.t * 2);
+  outlinedText(n.text, W / 2, safeTop + 110, Math.min(36, W * 0.04), '#a58ad8', { stroke: OUTLINE });
+  ctx.restore();
+}
+
 function draw() {
   G.buttons = [];
   if (G.state === 'select') drawSelect();
   else if (G.state === 'map') drawMap();
   else if (G.state === 'levels') drawLevels();
   else if (G.state === 'tally') drawTally();
+  else if (G.state === 'wait') drawWait();
   else drawPlay();
+  if (G.state === 'map' || G.state === 'levels') drawRoomBadge();
+  if (G.note) drawNote();
+  // The room panel takes every tap while it's open.
+  if (net.view) { G.buttons = []; drawNetPanel(); }
 }
 
 // ---------------------------------------------------------------------------
@@ -3179,8 +3755,18 @@ const GAME_KEYS = new Set([' ', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown
 window.addEventListener('keydown', (e) => {
   if (GAME_KEYS.has(e.key)) e.preventDefault();
   audioOn();
+  if (net.view) {
+    if (net.view === 'join' && !e.repeat) {
+      if (/^[a-z]$/i.test(e.key)) typeCode(e.key.toUpperCase());
+      if (e.key === 'Backspace') typeCode('⌫');
+      if (e.key === 'Enter' && net.typed.length === 4) joinRoom(net.typed);
+    }
+    if (e.key === 'Escape') { if (net.view === 'waiting' || net.view === 'joining') leaveRoom(); net.view = null; }
+    return;
+  }
+  if (G.state === 'wait') return;
   if (G.state === 'select' && !e.repeat) {
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') G.hero = G.hero === 'ruby' ? 'zach' : 'ruby';
+    if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !together()) G.hero = G.hero === 'ruby' ? 'zach' : 'ruby';
     if (e.key === 'Enter' || e.key === ' ') chooseHero(G.hero);
     return;
   }
@@ -3204,7 +3790,7 @@ window.addEventListener('keydown', (e) => {
     const b = G.buttons[0]; if (b) b.action();
     return;
   }
-  if (e.key === 'Escape' && G.state === 'play') { G.state = 'levels'; return; }
+  if (e.key === 'Escape' && G.state === 'play') { leaveLevel(); return; }
   keys[e.key] = true;
 });
 window.addEventListener('keyup', (e) => { keys[e.key] = false; });
@@ -3213,8 +3799,9 @@ document.addEventListener('gesturestart', (e) => e.preventDefault());
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 
 window.addEventListener('resize', resize);
-// Never reload in the middle of a level.
-window.autoUpdateIsIdle = () => G.state !== 'play';
+// Never reload in the middle of a level or while in a room.
+window.autoUpdateIsIdle = () => G.state !== 'play' && !net.peer;
+window.addEventListener('pagehide', () => send({ t: 'bye' }));
 
 // ---------------------------------------------------------------------------
 // Main loop
@@ -3230,6 +3817,7 @@ function frame(t) {
     update(step);
     dt -= step;
   }
+  netTick(t);
   draw();
   requestAnimationFrame(frame);
 }

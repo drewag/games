@@ -18,3 +18,7 @@ the first column.
 | Level | One course from start to goal | levels.md | stage, course |
 | World | A group of four levels, one per friend | levels.md | zone, chapter |
 | Bandit | The raccoon boss behind it all | world.md | villain, Bowser |
+| Room | Two iPads joined to play the same level | play.md | lobby, session, match |
+| Room code | The four letters that join a room | play.md | PIN, game code, invite |
+| Host | The iPad that made the room; picks levels and runs the enemies | play.md | server, leader, player 1 |
+| Playing together | Two heroes in one level on two iPads | play.md | multiplayer, co-op, versus |
