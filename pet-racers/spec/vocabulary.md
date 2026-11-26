@@ -22,4 +22,4 @@ first column is the one you want.
 | Room | iPads joined to race each other (up to five) | play.md | lobby, session, match, game |
 | Room code | The four letters that join a room | play.md | PIN, game code, invite |
 | Host | The iPad that made the room; relays messages and drives the rivals | play.md | server, leader, owner |
-| Track | One of the courses: Park, Backyard, Kitchen | look.md | course, level, map, circuit, stage |
+| Track | One of the courses: Park, Backyard, Kitchen, and the harder Snow, Bakery, Toy Room | look.md | course, level, map, circuit, stage |

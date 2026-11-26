@@ -6,13 +6,24 @@ of the genre are taken away for a 9-year-old. The kart accelerates by itself, yo
 fall off or get stuck, and nobody is far behind for long. **Pro driving** puts some back
 for whoever wants them: gas, hopping and drifting, as in Mario Kart.
 
-## Picking a pet
+## Picking a pet and a track
 
-The title screen shows the nine card scans in a row. Tapping a card picks that pet: it
-appears in its kart, slowly turning, with the kart's name and the power's name under it.
-Below the cards, **Park**, **Backyard** and **Kitchen** pick the track, and **Easy driving**
-or **Pro: hop & drift** picks the controls. **Race!** starts. The game remembers the last
-pet, track and controls picked. Each iPad picks its own controls, even in a room.
+The **pick screen** has two steps, one after the other:
+
+1. **A pet.** The nine card scans sit in a row. Tapping a card picks that pet: it appears
+   in its kart, slowly turning, with the kart's name and the power's name under it.
+   **Easy driving** or **Pro: hop & drift** picks the controls. **Next ▶** goes on.
+2. **A track.** The camera rises high over the track and slowly circles it. The tracks
+   come in two rows: **Easy** (Park, Backyard, Kitchen) and **Harder** (Snow, Bakery,
+   Toy Room), with a line about the picked one underneath. **Race!** starts, and
+   **◀ Pets** goes back.
+
+The game remembers the last pet, track and controls picked. Each iPad picks its own
+controls, even in a room.
+
+The **harder tracks** have more and tighter corners (hairpins on Snow, zig-zags in the
+Bakery, both in the Toy Room), a narrower road, a bigger slowdown off it, and rivals a
+little quicker (2–4%). Hedges, catch-up and everything else work the same.
 
 ## Controls
 
@@ -96,7 +107,7 @@ together, and the host's pick screen keeps showing the room code so more can joi
 the pick screen takes new people: a room that's mid-race, or that already has five iPads, turns
 joiners away with a message. Two people can't have the same pet. Taken cards say "Friend",
 and anyone who joins holding a taken pet gets the first free one. The host gets **Start!**
-picks the track (other iPads follow it and can't change it), and chooses **Race again!** or
+picks the track on the second step (other iPads stay on the pet step, follow the host's track and can't change it), and chooses **Race again!** or
 a new pick afterwards. Everyone else waits. **Leave** goes
 back to racing alone.
 

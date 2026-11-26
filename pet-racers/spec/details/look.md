@@ -43,3 +43,9 @@ closer than about 30 units (two road halves plus borders), and no more than abou
 turn per 5 units. The kart steers about 20° in that distance at full speed, and the
 steering help and grass cover a little more. The Park peaks at 24°, the Backyard at 14°
 and the Kitchen at 18°.
+
+The harder tracks break the bend rule on purpose, and each sets its own road width
+(`half`), off-road speed (`offroad`) and rival speed (`rivals`). Snow peaks at 18° on a
+half-width of 6, the Bakery at 29° on 5.5 and the Toy Room at 29° on 5, with 8, 18 and 20
+tight corners against the easy tracks' 4–6. The road-apart rule still holds, scaled to the
+narrower roads.

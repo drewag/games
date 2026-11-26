@@ -27,6 +27,9 @@ Each track is a place drawn from a pet's point of view:
 | Park | grey, dashed white line, red and white curbs | hedges | trees, pines, flowers, rocks, hills, clouds | blue pencil |
 | Backyard | dirt path, stone edging | white picket fence | sunflowers, a kiddie pool, a doghouse, garden beds, trees, two houses | blue pencil |
 | Kitchen | cutting-board tan, wooden line, yellow and white curbs | marshmallows | a giant mug, toaster, apples, oranges, jars, cookies on a tiled counter, cabinets all around | warm wall |
+| Snow | packed snow, blue dashed line, red and white curbs | snowbanks | snowy pines, snowmen, rocks, white hills, clouds | pale blue |
+| Bakery | flour-white, caramel line, pink and white curbs | donuts with pink, chocolate and vanilla frosting | cupcakes, rolling pins, cookies, jars, mugs on a wooden table | warm wall |
+| Toy Room | a toy-road rug, white dashed line, yellow and black curbs | toy blocks | block towers, balls, crayons on a striped rug | lilac wall |
 
 The pets are tiny in the kitchen: the counter's things are many times their size.
 

@@ -19,16 +19,17 @@ match it.
   powers (Math Defeater, Instant Hacking, Fashion Shoot), burger snacks, eight on the grid
 - [x] Halsy: model, Fry Box kart, Mind Access power, fries snacks, nine on the grid
 - [x] Backyard and Kitchen tracks, picked on the pick screen (by the host in a room)
+- [x] Harder tracks: Snow, Bakery, Toy Room; pick screen in two steps, pet then track
 - [x] Pro driving: Go/Back/Hop, drifting with blue, orange and purple boosts, rocket start
 
 ## Next
 
 - [ ] Play it on the iPad and tune speeds and frame rate
+- [ ] Race the harder tracks on the iPad: are they hard but fair? Tune widths and corners
 - [ ] Try Pro driving on the iPad: button layout, drift tightness, spark times, boost size
 - [ ] Race with three or more real iPads: check smoothness and Wi-Fi drops
 
 ## Later
 
-- [ ] More tracks (a bakery?)
 - [ ] Sound
 - [ ] Our own signaling server (Cloudflare Worker) if PeerJS's public one is unreliable

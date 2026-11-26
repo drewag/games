@@ -87,14 +87,18 @@
   .pc.on { opacity: 1; transform: translateY(-14px) scale(1.08) rotate(0deg); border-width: 5px; }
   .pc img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
   #pickInfo { font-size: 24px; margin-bottom: 10px; }
-  #tracks, #modes { display: flex; justify-content: center; gap: 10px; margin: 2px 0 10px; }
-  #modes { margin-top: -2px; }
+  #modes { display: flex; justify-content: center; gap: 10px; margin: -2px 0 10px; }
+  .trackRow { display: flex; justify-content: center; align-items: center; gap: 12px; margin: 4px 0 10px; }
+  .trackRow span { font-size: 20px; width: 70px; text-align: right; }
+  #trackInfo { font-size: 22px; margin: 0 0 12px; min-height: 1.2em; }
+  #pick[data-step="pet"] .track-step, #pick[data-step="track"] .pet-step { display: none; }
   #tracks button, #modes button {
     font: inherit; font-size: 22px; color: var(--ink); padding: 2px 18px; cursor: pointer;
     background: var(--paper); border: 3px solid var(--ink); border-radius: 18px 6px 18px 6px / 6px 18px 6px 18px;
     opacity: 0.6;
   }
   #modes button { font-size: 18px; padding: 0 14px; }
+  #tracks button { font-size: 30px; padding: 4px 22px; }
   #tracks button.on, #modes button.on { background: #ffe58a; opacity: 1; }
   #tracks.locked button { pointer-events: none; }
   #pickName { font-size: 32px; font-weight: normal; margin-right: 8px; }
@@ -104,7 +108,7 @@
   }
   #card h1 { margin: 0; font-size: 56px; font-weight: normal; }
   #card p { margin: 6px 0 16px; font-size: 22px; }
-  #go, #friendBtn, #card button {
+  #go, #next, #backBtn, #friendBtn, #card button {
     font: inherit; font-size: 32px; color: var(--ink); padding: 6px 36px; margin: 0 6px; cursor: pointer;
     background: #ffe58a;
   }
@@ -159,14 +163,17 @@
   <div id="big"></div>
   <div id="pop">Bonk!</div>
   <div id="title" class="hidden">Pet Racers</div>
-  <div id="pick" class="drawn hidden">
-    <div id="cards"></div>
-    <div id="tracks"></div>
-    <div id="modes"></div>
-    <div id="pickInfo"><span id="pickName"></span><span id="pickKart"></span></div>
+  <div id="pick" class="drawn hidden" data-step="pet">
+    <div id="cards" class="pet-step"></div>
+    <div id="modes" class="pet-step"></div>
+    <div id="pickInfo" class="pet-step"><span id="pickName"></span><span id="pickKart"></span></div>
+    <div id="tracks" class="track-step"></div>
+    <div id="trackInfo" class="track-step"></div>
     <div id="netStatus" class="hidden"></div>
-    <button id="go" class="drawn">Race!</button>
-    <button id="friendBtn" class="drawn plain">Race a friend</button>
+    <button id="backBtn" class="drawn plain track-step">&#9664; Pets</button>
+    <button id="next" class="drawn pet-step">Next &#9654;</button>
+    <button id="go" class="drawn track-step">Race!</button>
+    <button id="friendBtn" class="drawn plain pet-step">Race a friend</button>
   </div>
   <div id="net" class="drawn hidden"></div>
   <div id="card" class="drawn hidden">
@@ -962,8 +969,8 @@ for (const r of RACERS) {
 // built the first time it's picked and kept after that.
 // ---------------------------------------------------------------------------
 const N = 800;           // samples around every track
-const HALF = 7;          // half the road width
-const WALL = HALF + 3.5; // where the border stops you
+let HALF = 7;            // half the road width (narrower on the harder tracks)
+let WALL = HALF + 3.5;   // where the border stops you
 const wrap = (f) => ((f % N) + N) % N;
 let TP, TT, TR, TL;      // the current track's points, tangents, right vectors, length
 let track = null;
@@ -1102,6 +1109,54 @@ function cabinets(parts, x, z, a) {
     parts.push(place(paint(box(), '#d9a066'), { p: [x + Math.cos(a) * d, 30, z - Math.sin(a) * d], r: [0, a, 0], s: [18, 50, 8.6] }));
   }
 }
+function snowPine(parts, r, x, z) {
+  const h = 5 + r() * 3;
+  parts.push(place(paint(new THREE.CylinderGeometry(0.3, 0.4, 1.4, 6), '#7a4a2a'), { p: [x, 0.7, z] }));
+  for (let k = 0; k < 3; k++) {
+    const rad = 2.1 - k * 0.5, y = 1.4 + k * h * 0.22 + h * 0.2;
+    parts.push(place(paint(new THREE.ConeGeometry(rad, h * 0.45, 9), '#2f6a4a'), { p: [x, y, z] }));
+    parts.push(place(paint(new THREE.ConeGeometry(rad * 0.5, h * 0.2, 9), '#fbfdff'), { p: [x, y + h * 0.13, z] }));
+  }
+}
+function snowman(parts, r, x, z) {
+  const s = 1 + r() * 0.4;
+  for (const [y, rad] of [[1.3, 1.4], [3.3, 1.0], [4.8, 0.7]]) {
+    parts.push(place(paint(sphere(10, 8), '#fbfdff'), { p: [x, y * s, z], s: [rad * s, rad * s, rad * s] }));
+  }
+  parts.push(place(paint(new THREE.ConeGeometry(0.15, 0.7, 6), '#f08a24'), { p: [x, 4.8 * s, z + 0.9 * s], r: [Math.PI / 2, 0, 0] }));
+  parts.push(place(paint(new THREE.CylinderGeometry(0.5, 0.5, 0.8, 10), '#2a2228'), { p: [x, 5.7 * s, z] }));
+}
+function cupcake(parts, r, x, z) {
+  const s = 1.6 + r() * 1.2, wrap = pick1(r, ['#ff9ec4', '#8fd3ec', '#c8a2f0']);
+  parts.push(place(paint(new THREE.CylinderGeometry(1.1, 0.85, 1.3, 12), (x2, y2, z2) =>
+    (Math.floor((Math.atan2(x2, z2) + Math.PI) * 12 / Math.PI) % 2 ? wrap : '#fffdf6')), { p: [x, 0.65 * s, z], s: [s, s, s] }));
+  parts.push(place(paint(sphere(10, 7), pick1(r, ['#fff3e0', '#ffd6e5', '#7a4524'])), { p: [x, 1.45 * s, z], s: [1.15 * s, 0.75 * s, 1.15 * s] }));
+  parts.push(place(paint(sphere(8, 6), '#e53935'), { p: [x, 2.25 * s, z], s: [0.25 * s, 0.25 * s, 0.25 * s] }));
+}
+function rollingPin(parts, r, x, z) {
+  const a = r() * Math.PI;
+  parts.push(place(paint(new THREE.CylinderGeometry(0.9, 0.9, 8, 12), '#e0b27a'), { p: [x, 0.9, z], r: [0, a, Math.PI / 2] }));
+  for (const d of [-5, 5]) {
+    parts.push(place(paint(new THREE.CylinderGeometry(0.35, 0.35, 2, 8), '#c98a4b'),
+      { p: [x + Math.cos(a) * d, 0.9, z - Math.sin(a) * d], r: [0, a, Math.PI / 2] }));
+  }
+}
+const TOY_COLORS = ['#e53935', '#ffcf3f', '#3b7dd8', '#4caf50'];
+function blockTower(parts, r, x, z) {
+  const n = 2 + Math.floor(r() * 4);
+  for (let k = 0; k < n; k++) {
+    parts.push(place(paint(box(), pick1(r, TOY_COLORS)), { p: [x + (r() - 0.5) * 0.6, 1.5 + k * 3, z + (r() - 0.5) * 0.6], r: [0, r() * 1.5, 0], s: [3, 3, 3] }));
+  }
+}
+function toyBall(parts, r, x, z) {
+  const s = 2 + r() * 1.5, c = pick1(r, TOY_COLORS);
+  parts.push(place(paint(sphere(12, 8), (x2, y2) => (Math.abs(y2) < 0.3 ? '#fffdf6' : c)), { p: [x, s, z], r: [0, 0, r() - 0.5], s: [s, s, s] }));
+}
+function crayon(parts, r, x, z) {
+  const a = r() * Math.PI, c = pick1(r, TOY_COLORS);
+  parts.push(place(paint(new THREE.CylinderGeometry(0.6, 0.6, 6, 8), c), { p: [x, 0.6, z], r: [0, a, Math.PI / 2] }));
+  parts.push(place(paint(new THREE.ConeGeometry(0.6, 1.4, 8), c), { p: [x + Math.cos(a) * 3.7, 0.6, z - Math.sin(a) * 3.7], r: [0, a, -Math.PI / 2] }));
+}
 
 // What lines each side of the road, one piece every few steps.
 const BORDERS = {
@@ -1114,6 +1169,18 @@ const BORDERS = {
     parts.push(place(paint(box(), '#fffdf6'), { p: [p.x, 1.2, p.z], r: [0, a, 0], s: [0.5, 2.4, 0.9] }));
     parts.push(place(paint(new THREE.ConeGeometry(0.62, 0.6, 4), '#fffdf6'), { p: [p.x, 2.7, p.z], r: [0, a + Math.PI / 4, 0] }));
   },
+  snowbank: (parts, r, p) => {
+    const s = 1.2 + r() * 0.6;
+    parts.push(place(paint(sphere(8, 6), r() < 0.5 ? '#fbfdff' : '#e8eef6'), { p: [p.x, 0.3, p.z], s: [s * 1.6, s * 0.8, s * 1.6] }));
+  },
+  donut: (parts, r, p, i) => {
+    parts.push(place(paint(new THREE.TorusGeometry(1, 0.5, 6, 14), '#d99a5b'), { p: [p.x, 0.5, p.z], r: [Math.PI / 2, 0, 0] }));
+    parts.push(place(paint(new THREE.TorusGeometry(1, 0.42, 6, 14), ['#ff9ec4', '#7a4524', '#fff3e0'][Math.floor(i / 2) % 3]),
+      { p: [p.x, 0.72, p.z], r: [Math.PI / 2, 0, 0], s: [1, 1, 0.6] }));
+  },
+  block: (parts, r, p, i) => {
+    parts.push(place(paint(box(), TOY_COLORS[Math.floor(i / 2) % 4]), { p: [p.x, 0.9, p.z], r: [0, headingAt(i), 0], s: [1.8, 1.8, 1.8] }));
+  },
   marshmallow: (parts, r, p, i) => {
     parts.push(place(paint(new THREE.CylinderGeometry(0.9, 0.9, 1.6, 12), Math.floor(i / 3) % 2 ? '#ffd6e5' : '#fffdf6'),
       { p: [p.x, 0.8, p.z], r: [0, r(), 0] }));
@@ -1122,7 +1189,7 @@ const BORDERS = {
 
 const TRACKS = [
   {
-    name: 'Park',
+    name: 'Park', blurb: 'Round the park, past the hedges and trees',
     ctrl: [[0, -90], [60, -95], [110, -60], [105, 0], [70, 30], [90, 80], [40, 110],
       [-20, 90], [-50, 40], [-100, 50], [-120, 0], [-90, -60], [-50, -85]],
     road: '#c8c0b4', line: '#fffdf6', curbs: ['#e2483b', '#fffdf6'], border: 'hedge', borderStep: 3,
@@ -1131,7 +1198,7 @@ const TRACKS = [
     props: [[0.4, tree], [0.22, pine], [0.26, flowers], [0.12, rock]], count: 260,
   },
   {
-    name: 'Backyard',
+    name: 'Backyard', blurb: 'Along the fence, past the pool and the doghouse',
     ctrl: [[0, -95], [80, -100], [130, -55], [115, 5], [135, 65], [85, 115], [10, 110], [-30, 70],
       [-65, 25], [-115, 5], [-130, -50], [-75, -95]],
     road: '#c9a274', line: null, curbs: ['#9a9088', '#b4aca0'], border: 'fence', borderStep: 2,
@@ -1142,7 +1209,7 @@ const TRACKS = [
     extra: (parts) => { house(parts, 0, -235, 0); house(parts, 230, 40, Math.PI / 2); },
   },
   {
-    name: 'Kitchen',
+    name: 'Kitchen', blurb: 'Across the counter, between the marshmallows',
     ctrl: [[-100, -80], [10, -95], [105, -85], [145, -35], [120, 20], [135, 75], [75, 115], [-20, 100],
       [-55, 50], [-120, 40], [-140, -25]],
     road: '#e6d3b3', line: '#c98a4b', curbs: ['#ffcf3f', '#fffdf6'], border: 'marshmallow', borderStep: 2,
@@ -1155,6 +1222,38 @@ const TRACKS = [
         cabinets(parts, Math.sin(a) * 250, Math.cos(a) * 250, a);
       }
     },
+  },
+  // The harder tracks: more and tighter corners, a narrower road, slower
+  // going off it, and rivals that are a little quicker.
+  {
+    name: 'Snow', blurb: 'Hairpin bends up the mountain, and deep snow off the road', hard: true, half: 6, offroad: 0.45, rivals: 1.02,
+    ctrl: [[-110, -110], [0, -115], [90, -110], [130, -85], [120, -52], [80, -45], [0, -50], [-60, -45], [-90, -20], [-75, 8],
+      [-30, 12], [40, 8], [100, 15], [130, 42], [115, 72], [70, 75], [10, 75], [-50, 85], [-70, 115], [-110, 120], [-140, 90],
+      [-145, 20], [-140, -60]],
+    road: '#d3dbe6', line: '#8fb4d9', curbs: ['#e2483b', '#fffdf6'], border: 'snowbank', borderStep: 3,
+    ground: (x, y) => (Math.sin(x * 0.05) * Math.cos(y * 0.043) + Math.sin(x * 0.11 + y * 0.07) * 0.5 > 0.6 ? '#e6eef7' : '#f7f9fc'),
+    sky: [0.74, 0.84, 0.95], hills: ['#f4f7fb', '#dfe8f2'], clouds: true,
+    props: [[0.55, snowPine], [0.2, snowman], [0.25, rock]], count: 220,
+  },
+  {
+    name: 'Bakery', blurb: 'Zig-zags between the donuts on a narrow road', hard: true, half: 5.5, offroad: 0.5, rivals: 1.03,
+    ctrl: [[-120, -100], [-60, -105], [-30, -92], [0, -108], [30, -92], [60, -108], [110, -100], [135, -60], [112, -25],
+      [130, 10], [112, 45], [135, 80], [110, 115], [60, 120], [30, 100], [0, 120], [-40, 115], [-70, 80], [-55, 45], [-80, 15],
+      [-62, -20], [-98, -45], [-140, -62]],
+    road: '#f6ecd8', line: '#e0a96d', curbs: ['#ff9ec4', '#fffdf6'], border: 'donut', borderStep: 2,
+    ground: (x, y) => (Math.floor(y / 7) % 2 ? '#d9a066' : '#cf955a'),     // a wooden table
+    sky: [0.98, 0.88, 0.72], hills: null, clouds: false,
+    props: [[0.4, cupcake], [0.15, rollingPin], [0.25, cookie], [0.1, jar], [0.1, mug]], count: 110,
+  },
+  {
+    name: 'Toy Room', blurb: 'The twistiest, narrowest road, round the toys', hard: true, half: 5, offroad: 0.5, rivals: 1.04,
+    ctrl: [[-110, -110], [-20, -115], [40, -100], [58, -70], [20, -52], [-20, -45], [-32, -15], [10, -2], [80, -10], [120, -40],
+      [148, -10], [130, 30], [80, 40], [62, 70], [95, 95], [130, 110], [110, 140], [40, 135], [0, 110], [-20, 70], [-60, 58], [-72, 100],
+      [-110, 122], [-148, 90], [-130, 40], [-90, 20], [-100, -20], [-140, -40], [-145, -85]],
+    road: '#8e8e98', line: '#fffdf6', curbs: ['#ffcf3f', '#2a2228'], border: 'block', borderStep: 2,
+    ground: (x, y) => (Math.floor(Math.max(Math.abs(x), Math.abs(y)) / 25) % 2 ? '#7fa8d8' : '#9cc0e6'),   // a rug
+    sky: [0.93, 0.9, 0.98], hills: null, clouds: false,
+    props: [[0.4, blockTower], [0.3, toyBall], [0.3, crayon]], count: 120,
   },
 ];
 
@@ -1182,7 +1281,7 @@ function buildTrack(def) {
     strip(-HALF - 1.2, -HALF, stripe, 0.05);
     strip(HALF, HALF + 1.2, stripe, 0.05);
     if (i < 3) {                                           // checkered start line
-      for (let k = 0; k < 14; k++) strip(-HALF + k, -HALF + k + 1, (k + i) % 2 ? '#2a2228' : '#fffdf6', 0.06);
+      for (let k = 0; k < 2 * HALF; k++) strip(-HALF + k, -HALF + k + 1, (k + i) % 2 ? '#2a2228' : '#fffdf6', 0.06);
     }
   }
   const road = new THREE.BufferGeometry();
@@ -1262,7 +1361,7 @@ const snacks = [];
       const food = FOODS[Math.floor(r() * FOODS.length)];
       const m = mesh(SNACK_GEO[food]);
       scene.add(m);
-      snacks.push({ m, food, f: 60 + k * (N / 8) + lat * 2, lat, base: new V3(), gone: 0 });
+      snacks.push({ m, food, f: 60 + k * (N / 8) + lat * 2, lat, lat0: lat, base: new V3(), gone: 0 });
     }
   }
 }
@@ -1272,11 +1371,13 @@ function loadTrack(def) {
   if (track === def) return;
   if (track) track.mesh.visible = false;
   track = def;
+  HALF = def.half || 7;
+  WALL = HALF + 3.5;
   setCurve(def.ctrl);
   if (!def.mesh) { def.mesh = buildTrack(def); scene.add(def.mesh); }
   def.mesh.visible = true;
   compMat.uniforms.uSky.value.set(...def.sky);
-  for (const p of snacks) { trackPoint(p.f, p.lat, p.base); p.m.position.copy(p.base); }
+  for (const p of snacks) { p.lat = p.lat0 * HALF / 7; trackPoint(p.f, p.lat, p.base); p.m.position.copy(p.base); }
 }
 loadTrack(TRACKS[0]);
 
@@ -1538,7 +1639,7 @@ function updatePlayer(dt, canDrive) {
   let target = !canDrive || me.stall > 0 ? 0
     : easy || input.gas || input.hop ? MAX_SPEED
     : input.back ? -REVERSE : 0;
-  if (offroad && me.brave <= 0 && me.boost <= 0) target *= 0.55;
+  if (offroad && me.brave <= 0 && me.boost <= 0) target *= track.offroad || 0.55;
   if (me.rush > 0) target *= 1.4;
   else if (me.nibble > 0) target *= 1.15;
   if (me.boost > 0 && canDrive) target = Math.max(target, MAX_SPEED * 1.3);
@@ -1613,7 +1714,7 @@ function updateRivals(dt, canDrive) {
     // Catch-up: ease off when far ahead of the people, push when far behind.
     const gap = ours - progressOf(r);
     const band = THREE.MathUtils.clamp(1 + (gap / N) * 1.2, 0.82, 1.12);
-    let target = canDrive ? MAX_SPEED * r.skill * band : 0;
+    let target = canDrive ? MAX_SPEED * r.skill * band * (track.rivals || 1) : 0;
     if (r.spin > 0) target *= 0.25;
     r.speed += (target - r.speed) * Math.min(1, dt * (target > r.speed ? 0.8 : 3));
     r.s += r.speed * dt;
@@ -2161,11 +2262,33 @@ function netTick(now) {
 // Camera
 // ---------------------------------------------------------------------------
 const camPos = new V3(), camLook = new V3();
+function trackCenter() {
+  if (!track.center) {
+    const xs = TP.map((p) => p.x), zs = TP.map((p) => p.z);
+    track.center = new V3((Math.min(...xs) + Math.max(...xs)) / 2, 0, (Math.min(...zs) + Math.max(...zs)) / 2);
+  }
+  return track.center;
+}
 function updateCamera(dt, t) {
   if (state === 'title') {
     const a = (ORBIT === null ? t * 0.35 : ORBIT) + player.heading;
-    camPos.set(player.pos.x + Math.sin(a) * 5, 2.3, player.pos.z + Math.cos(a) * 5);
-    camLook.copy(player.pos).setY(0.15);     // low, so the kart sits above the pick panel
+    let wantPos, wantLook;
+    if (pickStep === 'track') {
+      // High over the whole track, slowly circling. Looking at a point a bit
+      // nearer than the middle keeps the track above the pick panel.
+      const b = (ORBIT === null ? t * 0.08 : ORBIT);
+      const c = trackCenter();
+      wantPos = new V3(c.x + Math.sin(b) * 170, 165, c.z + Math.cos(b) * 170);
+      wantLook = new V3(c.x + Math.sin(b) * 55, 0, c.z + Math.cos(b) * 55);
+    } else {
+      wantPos = new V3(player.pos.x + Math.sin(a) * 5, 2.3, player.pos.z + Math.cos(a) * 5);
+      wantLook = player.pos.clone().setY(0.15);     // low, so the kart sits above the pick panel
+    }
+    // Glide between the two steps; otherwise stay put.
+    const far = camPos.distanceTo(wantPos) > 1;
+    const k = far ? 1 - Math.exp(-dt * 3) : 1;
+    camPos.lerp(wantPos, k);
+    camLook.lerp(wantLook, k);
     camera.position.copy(camPos);
     camera.lookAt(camLook);
     return;
@@ -2246,12 +2369,28 @@ for (const r of RACERS) {
 }
 
 const TRACK_KEY = 'pet-racers-track';
-for (const def of TRACKS) {
-  const b = document.createElement('button');
-  b.textContent = def.name;
-  b.dataset.name = def.name;
-  b.addEventListener('click', () => chooseTrack(def));
-  $('tracks').append(b);
+for (const [label, hard] of [['Easy', false], ['Harder', true]]) {
+  const row = document.createElement('div');
+  row.className = 'trackRow';
+  row.innerHTML = `<span>${label}</span>`;
+  for (const def of TRACKS.filter((d) => !!d.hard === hard)) {
+    const b = document.createElement('button');
+    b.textContent = def.name;
+    b.dataset.name = def.name;
+    b.addEventListener('click', () => chooseTrack(def));
+    row.append(b);
+  }
+  $('tracks').append(row);
+}
+
+// The pick screen is two steps: a pet, then a track. Only the host (or
+// someone racing alone) gets to the track step.
+let pickStep = 'pet';
+function setPickStep(step) {
+  pickStep = isGuest() ? 'pet' : step;
+  $('pick').dataset.step = pickStep;
+  $('title').textContent = pickStep === 'track' ? 'Pick a track' : 'Pet Racers';
+  updatePickUi();
 }
 // Easy or Pro driving. Each iPad picks its own, even in a room.
 const MODE_KEY = 'pet-racers-controls';
@@ -2285,16 +2424,18 @@ function updatePickUi() {
     el.classList.toggle('on', el.dataset.name === player.name);
     el.classList.toggle('taken', friends.some((r) => r.name === el.dataset.name));
   }
-  for (const el of $('tracks').children) el.classList.toggle('on', el.dataset.name === track.name);
+  for (const el of $('tracks').querySelectorAll('button')) el.classList.toggle('on', el.dataset.name === track.name);
+  $('trackInfo').textContent = track.blurb;
   for (const el of $('modes').children) el.classList.toggle('on', el.dataset.pro === String(pro));
   $('tracks').classList.toggle('locked', guest);
   $('go').textContent = n ? 'Start!' : 'Race!';
   $('go').classList.toggle('hidden', guest);
+  $('next').classList.toggle('hidden', guest);
   $('friendBtn').textContent = room ? 'Leave' : 'Race a friend';
   $('netStatus').classList.toggle('hidden', !room);
   $('netStatus').textContent = net.host
-    ? `Room ${net.code} · ${n} friend${n === 1 ? '' : 's'} here · tap Start when everyone’s ready`
-    : `Room ${net.code} · ${n + 1} racers · the room maker taps Start`;
+    ? `Room ${net.code} · ${n} friend${n === 1 ? '' : 's'} here · ${pickStep === 'pet' ? 'tap Next when everyone has a pet' : 'tap Start when everyone’s ready'}`
+    : `Room ${net.code} · ${n + 1} racers · ${track.name} · the room maker picks the track and starts`;
   $('again').classList.toggle('hidden', guest);
   $('other').classList.toggle('hidden', guest);
   $('cardWait').classList.toggle('hidden', !guest);
@@ -2354,7 +2495,7 @@ function backToPick() {
   if (net.host) send({ t: 'lobby' });
   resetRace();
   setState('title');
-  updatePickUi();
+  setPickStep('pet');
 }
 
 const ORDINAL = ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'];
@@ -2373,6 +2514,8 @@ function updateHud() {
 }
 
 $('go').addEventListener('click', startRace);
+$('next').addEventListener('click', () => setPickStep('track'));
+$('backBtn').addEventListener('click', () => setPickStep('pet'));
 $('friendBtn').addEventListener('click', () => (inRoom() ? leaveRoom() : showNet('menu')));
 $('again').addEventListener('click', startRace);
 $('other').addEventListener('click', backToPick);
@@ -2419,6 +2562,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === ' ' || e.key === 'Enter') {
     const canStart = !isGuest();
     if (state === 'race') usePower();
+    else if (state === 'title' && pickStep === 'pet' && canStart && $('net').classList.contains('hidden')) setPickStep('track');
     else if ((state === 'title' || state === 'done') && canStart && $('net').classList.contains('hidden')) startRace();
     e.preventDefault();
   }
