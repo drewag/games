@@ -31,12 +31,12 @@ const PAL = {
   u: '#4b1f8f', v: '#a58ad8',
   G: '#4caf50', h: '#9ccc65', r: '#e53935', c: '#7a4524', d: '#4e2914',
   f: '#d32f2f', l: '#7ec8e3', s: '#a8a8a8', S: '#d8d8d8', T: '#d9a066',
-  B: '#5a3214', Y: '#ffcf3f', P: '#ff7eb6', W: '#fff3e0',
+  B: '#5a3214', Y: '#ffcf3f', P: '#ff7eb6', W: '#fff3e0', O: '#e8d7a8',
 };
 const OUTLINE = '#2a2228';
 
 const PETS = [
-  { name: 'Fluff Puss', fav: 'carrot', rows: [
+  { name: 'Fluff Puss', fav: 'applesauce', rows: [
     '...ww.ww...',
     '...ww.ww...',
     '...ww.ww...',
@@ -52,7 +52,7 @@ const PETS = [
     '....www....',
     '....w.w....',
   ]},
-  { name: 'Mongo', fav: 'strawberry', rows: [
+  { name: 'Mongo', fav: 'goldfish', rows: [
     '..bb...oo..',
     '.bbbb.oooo.',
     '.bbbbwoooo.',
@@ -67,7 +67,7 @@ const PETS = [
     '....www....',
     '....w.w....',
   ]},
-  { name: 'Buddy', fav: 'bone', rows: [
+  { name: 'Buddy', fav: 'granola', rows: [
     'wbbbbbbbbbbw',
     'wbbbbbbbbbbw',
     'wbbbbbbbbbbw',
@@ -80,7 +80,7 @@ const PETS = [
     '....tttt....',
     '....t..t....',
   ]},
-  { name: 'Duffy', fav: 'honey', rows: [
+  { name: 'Duffy', fav: 'granola', rows: [
     'yyy......yyy',
     'yyyyyyyyyyyy',
     '.yyyyyyyyyy.',
@@ -93,7 +93,7 @@ const PETS = [
     '....yyyy....',
     '....y..y....',
   ]},
-  { name: 'Choco', fav: 'choco', rows: [
+  { name: 'Choco', fav: 'cookie', rows: [
     '..uu....uu..',
     '..uu....uu..',
     '.uuuuuuuuuu.',
@@ -118,66 +118,36 @@ const SNACKS = {
     'TTTBTT',
     '.TTTT.',
   ],
-  apple: [
-    '...d..',
-    '..Gd..',
-    '.rrrr.',
-    'rrrrrr',
-    'rrrrrr',
-    'rrrrrr',
-    '.rrrr.',
+  granola: [
+    'fOOOOOOf',
+    'fOTOcOTf',
+    'fTOOTOOf',
+    'fOcOTOcf',
+    'fOOTOOOf',
   ],
-  cupcake: [
-    '..f...',
-    '.PPPP.',
-    'PPWPPP',
-    'PPPPWP',
-    'llllll',
-    '.llll.',
-    '.llll.',
-  ],
-  carrot: [
-    '.G.G.',
-    '..G..',
-    '.ooo.',
-    '.ooo.',
-    '.ooo.',
-    '..oo.',
-    '..o..',
-  ],
-  strawberry: [
-    '..GGG..',
-    '.rrrrr.',
-    'rrWrrWr',
-    'rrrrrrr',
-    '.rWrrr.',
-    '..rrr..',
-    '...r...',
-  ],
-  bone: [
-    'WW....WW',
-    'WWWWWWWW',
+  applesauce: [
+    'rrrrrrrr',
     '.WWWWWW.',
-    'WWWWWWWW',
-    'WW....WW',
+    '.WWWGWW.',
+    '.WrrrrW.',
+    '.WrrrrW.',
+    '.WWrrWW.',
+    '..WWWW..',
   ],
-  honey: [
-    '..YYY..',
-    '.ccccc.',
-    'YYYYYYY',
-    'YYcYYYY',
-    'YYYYcYY',
-    'YYYYYYY',
-    '.YYYYY.',
+  goldfish: [
+    '..oooo..o',
+    '.oonooooo',
+    'oooooooo.',
+    '.oooooooo',
+    '..oooo..o',
   ],
-  choco: [
-    'cdcdc',
-    'ccccc',
-    'cdcdc',
-    'ccccc',
-    'fffff',
-    'fffff',
-    'fffff',
+  oatmeal: [
+    '..OOOO..',
+    '.OOSOOO.',
+    'OOOOOSOO',
+    'llllllll',
+    '.llllll.',
+    '..llll..',
   ],
   broccoli: [
     '.GGG.',
@@ -186,15 +156,6 @@ const SNACKS = {
     '.GGG.',
     '..h..',
     '..h..',
-  ],
-  sock: [
-    'SS...',
-    'ss...',
-    'SS...',
-    'ss...',
-    'SSsS.',
-    'ssSSs',
-    '.SsS.',
   ],
   heart: [
     '.rr.rr.',
@@ -213,8 +174,8 @@ const SNACKS = {
     '...S...',
   ],
 };
-const GOOD = ['cookie', 'apple', 'cupcake', 'carrot', 'strawberry', 'bone', 'honey', 'choco'];
-const BAD = ['broccoli', 'sock'];
+const GOOD = ['cookie', 'granola', 'applesauce', 'goldfish'];
+const BAD = ['broccoli', 'oatmeal'];
 
 const TITLE_FONT = '"Arial Black", "Arial Rounded MT Bold", Impact, system-ui, sans-serif';
 const HAND_FONT = '"Marker Felt", "Chalkboard SE", "Comic Sans MS", cursive';
@@ -398,7 +359,7 @@ function catchItem(it) {
   } else if (BAD.includes(it.kind)) {
     G.hearts--;
     G.hurt = 0.6;
-    pop(it.kind === 'sock' ? 'Stinky!' : 'Yuck!', it.x, it.y, '#4b8f29');
+    pop(it.kind === 'oatmeal' ? 'Blech!' : 'Yuck!', it.x, it.y, '#4b8f29');
     burst(it.x, it.y, ['#4caf50', '#9ccc65', '#a8a8a8'], 10);
     SFX.bad();
     buzz(120);
