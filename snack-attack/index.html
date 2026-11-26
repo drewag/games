@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Snack Attack">
+<meta name="apple-mobile-web-app-title" content="Games">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="apple-touch-icon" href="../icon-180.png">
 <meta name="theme-color" content="#fbf8f1">
 <title>Snack Attack</title>
 <style>
@@ -853,10 +855,43 @@ function button(label, x, y, w, h, color, action) {
 // ---------------------------------------------------------------------------
 // Screens
 // ---------------------------------------------------------------------------
+const HOUSE = [
+  '....r....',
+  '...rrr...',
+  '..rrrrr..',
+  '.rrrrrrr.',
+  'rrrrrrrrr',
+  '.wwwwwww.',
+  '.wllwwww.',
+  '.wllwbbw.',
+  '.wwwwbbw.',
+];
+
+// Back to the games list (the folder above this game).
+function drawHomeButton() {
+  const size = 52, x = 12, y = safeTop + 12;
+  ctx.save();
+  ctx.fillStyle = OUTLINE;
+  roundRect(x, y + 3, size, size, 14);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  roundRect(x, y, size, size, 14);
+  ctx.fill();
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = OUTLINE;
+  ctx.stroke();
+  ctx.restore();
+  drawSprite(sprite('house', HOUSE, 4), x + size / 2, y + size / 2);
+  G.buttons.push({ x, y, w: size, h: size, action: () => { location.href = '../'; } });
+  return y + size;
+}
+
 function drawSelect() {
   drawPaper();
   const pad = 16;
-  const titleBottom = drawTitle(W / 2, safeTop + pad, W - pad * 2, H * 0.24);
+  const homeBottom = drawHomeButton();
+  const titleTop = W < 560 ? homeBottom + 8 : safeTop + pad;
+  const titleBottom = drawTitle(W / 2, titleTop, W - pad * 2, H * 0.22);
 
   const subSize = Math.min(30, W * 0.065);
   ctx.save();
@@ -1141,6 +1176,7 @@ document.addEventListener('gesturestart', (e) => e.preventDefault());
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 
 window.addEventListener('resize', resize);
+window.autoUpdateIsIdle = () => G.state !== 'play';
 
 // ---------------------------------------------------------------------------
 // Main loop
@@ -1161,5 +1197,6 @@ function frame(t) {
 resize();
 requestAnimationFrame(frame);
 </script>
+<script src="../auto-update.js"></script>
 </body>
 </html>
