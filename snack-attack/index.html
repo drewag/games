@@ -384,6 +384,8 @@ const SFX = {
   thud: () => tone(140, 0, 0.08, 'triangle', 0.05, 90),
   bonk: () => { tone(330, 0, 0.1, 'square', 0.06, 160); tone(160, 0.08, 0.2, 'sawtooth', 0.05, 70); },
   over: () => [523, 440, 349, 262].forEach((f, i) => tone(f, i * 0.15, 0.2, 'triangle', 0.1)),
+  streak: () => [659, 784, 988, 1319, 1568].forEach((f, i) => tone(f, i * 0.05, 0.12, 'triangle', 0.09)),
+  miss: () => tone(440, 0, 0.18, 'triangle', 0.06, 260),
 };
 function buzz(ms) { if (navigator.vibrate) navigator.vibrate(ms); }
 
@@ -415,7 +417,7 @@ function clampPetX(x) {
 function startGame(petIndex) {
   G.pet = petIndex;
   G.state = 'play';
-  G.score = 0; G.hearts = 3; G.time = 0; G.spawnT = 0.6;
+  G.score = 0; G.basePts = 0; G.streak = 0; G.bestStreak = 0; G.hearts = 3; G.time = 0; G.spawnT = 0.6;
   G.items = []; G.parts = []; G.pops = [];
   G.visitors = []; G.visitorT = 8; G.invuln = 0; G.facing = 0; G.stillT = 0;
   G.squash = 0; G.hurt = 0; G.newBest = false;
@@ -423,7 +425,20 @@ function startGame(petIndex) {
   makeClouds();
 }
 
-function level() { return Math.floor(G.score / 10); }
+// Difficulty follows the points you'd get without streak bonuses, so a big
+// streak doesn't make the snacks fall faster.
+function level() { return Math.floor(G.basePts / 10); }
+
+// Streaks: every good snack caught in a row adds to the streak. Every 5 in a
+// row bumps the bonus (x2, x3, ... up to x5). Letting a good snack hit the
+// ground or eating a yucky one breaks it.
+const STREAK_STEP = 5, MAX_MULT = 5;
+const streakMult = () => Math.min(MAX_MULT, 1 + Math.floor(G.streak / STREAK_STEP));
+
+function breakStreak(x, y) {
+  if (G.streak >= STREAK_STEP) pop('Streak lost!', x, y, '#6d6a70');
+  G.streak = 0;
+}
 
 function spawn() {
   const lv = level();
@@ -468,12 +483,24 @@ function catchItem(it) {
     burst(it.x, it.y, ['#4caf50', '#9ccc65', '#a8a8a8'], 10);
     SFX.bad();
     buzz(120);
+    breakStreak(it.x, it.y - L.petPx * 5);
     if (G.hearts <= 0) gameOver();
   } else {
     const fav = it.kind === PETS[G.pet].fav;
-    const pts = fav ? 3 : 1;
+    const base = fav ? 3 : 1;
+    const before = streakMult();
+    G.streak++;
+    G.bestStreak = Math.max(G.bestStreak, G.streak);
+    const mult = streakMult();
+    const pts = base * before;
+    G.basePts += base;
     G.score += pts;
-    pop(fav ? 'YUM! +3' : '+1', it.x, it.y, fav ? '#ff4f9a' : '#1e4fa3');
+    pop(fav ? `YUM! +${pts}` : `+${pts}`, it.x, it.y, fav ? '#ff4f9a' : '#1e4fa3');
+    if (mult > before) {
+      pop(`STREAK x${mult}!`, W / 2, L.groundY * 0.45, '#ff7b00');
+      burst(W / 2, L.groundY * 0.45, ['#ff7b00', '#ffcf3f', '#ff4f9a', '#ffffff'], 26);
+      SFX.streak();
+    }
     burst(it.x, it.y, fav ? ['#ff7eb6', '#ffcf3f', '#7ec8e3', '#ffffff'] : ['#ffcf3f', '#ffffff', '#f4a6c4'], fav ? 22 : 10);
     (fav ? SFX.fav : SFX.good)();
     G.squash = 1;
@@ -592,6 +619,10 @@ function update(dt) {
         if (G.state !== 'play') break;
       } else if (it.y - ih / 2 > H) {
         G.items.splice(i, 1);
+        if (GOOD.includes(it.kind) && G.streak > 0) {
+          if (G.streak >= STREAK_STEP) SFX.miss();
+          breakStreak(Math.max(60, Math.min(W - 60, it.x)), L.groundY - L.petPx * 2);
+        }
       }
     }
   } else if (G.state === 'over') {
@@ -1149,6 +1180,31 @@ function drawHud() {
   drawSprite(fs, 16 + sw(fs) / 2, fy);
   outlinedText('= 3', 16 + sw(fs) + 8, fy, size * 0.5, '#ff4f9a', { align: 'left', stroke: '#ffffff' });
 
+  // streak counter and bonus under the favorite hint
+  if (G.streak > 0) {
+    const mult = streakMult();
+    const sy = fy + sh(fs) / 2 + size * 0.45;
+    const ss = size * 0.5;
+    ctx.save();
+    ctx.font = `900 ${ss}px ${TITLE_FONT}`;
+    const label = `Streak ${G.streak}`;
+    const lw = ctx.measureText(label).width;
+    ctx.restore();
+    outlinedText(label, 16, sy, ss, mult > 1 ? '#ff7b00' : '#6d6a70', { align: 'left', stroke: '#ffffff' });
+    if (mult > 1) {
+      const pulse = 1 + 0.08 * Math.sin(G.time * 8);
+      outlinedText(`x${mult}`, 16 + lw + 10, sy, ss * 1.25 * pulse, '#ff4f9a', { align: 'left', stroke: '#ffffff' });
+    } else {
+      // little progress dots toward the first bonus
+      for (let k = 0; k < STREAK_STEP; k++) {
+        ctx.fillStyle = k < G.streak ? '#ff7b00' : 'rgba(109,106,112,0.35)';
+        ctx.beginPath();
+        ctx.arc(16 + lw + 14 + k * 12, sy, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
   // hearts
   for (let i = 0; i < 3; i++) {
     const hs = snackSprite(i < G.hearts ? 'heart' : 'heartEmpty', L.hudPx);
@@ -1165,7 +1221,7 @@ function drawOver() {
   const pw = Math.min(W * 0.88, 380);
   const bh = 58;
   const ps = petSprite(G.pet, Math.max(3, Math.round(L.petPx * 0.8)));
-  const ph = 60 + sh(ps) + 20 + 70 + 40 + bh * 2 + 16 + 24;
+  const ph = 60 + sh(ps) + 20 + 70 + 40 + 28 + bh * 2 + 16 + 24;
   const px = (W - pw) / 2;
   const py = Math.max(safeTop + 8, (H - ph) / 2);
 
@@ -1191,6 +1247,9 @@ function drawOver() {
   ctx.textBaseline = 'middle';
   ctx.fillStyle = G.newBest ? '#ff4f9a' : '#6d6a70';
   ctx.fillText(G.newBest ? 'New best score!' : `Best: ${G.best}`, W / 2, y);
+  y += 28;
+  ctx.fillStyle = '#ff7b00';
+  ctx.fillText(`Longest streak: ${G.bestStreak}`, W / 2, y);
   ctx.restore();
   y += 30;
 
