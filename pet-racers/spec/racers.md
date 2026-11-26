@@ -21,13 +21,13 @@ yellow pet Mango); this game goes by the cards.
 | Halsy | Fry Box | fries and burgers | green | **Mind Access** |
 
 A pet's color comes from "Fav color" on their card. Zeus lists two favorite foods, so both
-sushi and burgers fill two meter segments for Zeus. Halsy's card says McDonald's, so fries
+sushi and burgers count as favorites for Zeus. Halsy's card says McDonald's, so fries
 and burgers both count for Halsy. Their power's effects are drawn in it.
 
 ## Powers
 
-Every power is one button press that uses a full **meter** (see [play](play.md#snacks-and-the-meter)).
-Each one gives the pet its own way to race:
+A power is one of the **items** a snack can give (see [play](play.md#snacks-and-items)),
+most often a favorite food. Each one gives the pet its own way to race:
 
 - **Gaming Knockout** (Buddy): a ring bursts out from the kart, and every rival within about
   two kart-lengths spins out. Buddy wants to be in the middle of the pack.
@@ -56,7 +56,7 @@ Each one gives the pet its own way to race:
   about 20 kart-lengths). A green trail of thought reaches each one, and they forget
   they're racing and spin out ("Mind read!"). Halsy wants to be at the back of a pack.
 
-Rivals don't use powers. They can only be bumped or spun out, which keeps races friendly
+Rivals don't use powers or items. They can only be bumped or spun out, which keeps races friendly
 for younger players.
 
 The powers come from the "Powers" line on each card. Several cards also list love,

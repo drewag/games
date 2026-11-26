@@ -8,8 +8,10 @@ first column is the one you want.
 | Racer | The pet you picked and are driving | racers.md | player character, driver, hero |
 | Rival | A pet driven by the computer | racers.md | opponent, AI, CPU, enemy, bot |
 | Kart | The food-shaped vehicle a pet rides | racers.md | car, vehicle |
-| Power | A pet's one special move, used with a full meter | racers.md | ability, item, special, super |
-| Meter | The 3-segment bar that fills from snacks | play.md | power bar, charge, energy |
+| Power | A pet's own special move, one of the items | racers.md | ability, special, super |
+| Item | What a snack gives: Banana Peel, Cherry, Hot Pepper, or the pet's power | play.md | ability, pickup, weapon |
+| Spare | The second item held in reserve; tap to swap | play.md | reserve, backup, slot 2 |
+| Boost pad | The orange arrow patch on a straight that gives a boost | play.md | dash panel, speed pad, booster |
 | Snack | Food floating over the track | play.md | pickup, item, coin, collectible |
 | Spin out | A kart twirls and slows after a power hits it | play.md | knocked out, stunned, crash |
 | Pro driving | The Mario Kart-style controls: Go, Back, Hop, drifting | play.md | hard mode, advanced, manual |

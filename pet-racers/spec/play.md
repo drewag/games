@@ -30,19 +30,20 @@ little quicker (2–4%). Hedges, catch-up and everything else work the same.
 The game is played in landscape on an iPad. On-screen buttons sit under the thumbs:
 
 - **◀ ▶**, bottom-left, held to steer
-- **Power**, bottom-right, labeled with the pet's power name. It lights up and wobbles
-  when the meter is full.
+- **Item**, bottom-right, showing the item in hand (see [Snacks and items](#snacks-and-items)).
+  It's faded when empty, and yellow and wobbling when it holds your pet's power.
+- **Spare**, a smaller button beside it, showing the spare item. Tapping it swaps the two.
 - **Look back**, beside Power, held to look behind: the camera flips to face back down
   the road from in front of the kart, and snaps back when let go.
 
 With neither steering button held, the kart eases toward the road ahead on its own. That
 makes steering a correction, not a constant job. Arrow keys and space work on a computer,
-and C or Q looks back.
+E swaps the spare, and C or Q looks back.
 
 ### Pro driving
 
 Pro driving copies Mario Kart's controls. There's no steering help, and the kart only
-goes while you hold the gas. Three more buttons sit bottom-right, with Power moved up
+goes while you hold the gas. Three more buttons sit bottom-right, with Item and Spare moved up
 above them:
 
 - **Go**, held to drive. Let go and the kart coasts to a stop.
@@ -75,31 +76,52 @@ place (1st–9th). After the third lap, a card shows your place and time and off
   about half speed.
 - **Hedges, a fence or marshmallows** line the track. Driving into them slides the kart back along the road and
   costs some speed. It never stops the kart or turns it around.
+- **Boost pads**, orange with white arrows, sit on the straightest parts of every track
+  (three or four per track, in the middle or to one side). Driving over one gives a boost,
+  the same as a drift's, so it's worth steering onto. Rivals use them too.
 - **Karts bump** each other apart. Bumping never spins anyone out (Brave Mode aside).
 - **Catch-up**: rivals far ahead of you ease off, and rivals far behind speed up, so
   the race stays close. Rivals differ a little in top speed, so the order varies.
 
-## Snacks and the meter
+## Snacks and items
 
 Snacks float over the track in rows across it: tacos, sushi, ramen, popcorn, burgers and fries, mixed.
-Driving through one eats it, and it comes back a few seconds later. The **meter** in the
-top corner has 3 segments. A snack fills one; your pet's favorite food fills two. A full
-meter lights up the Power button, and using the power empties it.
+Driving through one eats it, and it comes back a few seconds later. Eating a snack gives an
+**item**, which flickers through the choices on the Item button for a moment before it
+lands. You can hold two: the one in hand and a **spare**. A snack fills the hand if it's
+empty, otherwise the spare; with both full, it's just a snack. Using the item in hand moves
+the spare up, and tapping the spare swaps them, to save the power for later.
 
-Rivals eat snacks too, which takes them away from you, but they have no meter.
+The items:
+
+- 🍌 **Banana Peel**: dropped behind the kart. The first kart to drive over it spins out
+  ("Slip!"), and that includes you, so remember where you left it. Peels last 40 seconds.
+- 🍒 **Cherry**: thrown straight down the road, fast, on the line you're driving. It
+  spins out the first kart it touches, or pops after 3 seconds. Aim by lining up.
+- 🌶️ **Hot Pepper**: a boost, like a drift's but longer. It ignores the grass slowdown, so
+  it's good for a short cut.
+- ★ **Your pet's power** (see [racers](racers.md#powers)). A favorite food gives it half the
+  time; any other snack gives it now and then.
+
+Further back in the race, the power and the Hot Pepper come up more often and the peel less,
+so whoever's behind gets the help.
+
+Rivals eat snacks too, which takes them away from you, but they don't get items. Duffy
+still gets a nibble boost from every snack.
 
 ## Spinning out
 
-A rival hit by a power **spins out**: their kart twirls, they slow to a crawl for about
+A rival hit by a power or an item **spins out**: their kart twirls, they slow to a crawl for about
 1.5 seconds, and "Bonk!" pops up. Then they carry on. Rivals never spin you out, because
-they don't use powers. A friend's powers can.
+they don't use items. A banana peel can, even your own, and so can a friend's items.
 
 ## Sound
 
 Everything you hear is made by the game as it plays (Web Audio, no sound files), so it
 works offline. While racing there's an engine hum that rises with speed, a tire squeal
 while drifting and a rumble off the road. Short sounds mark the countdown beeps and GO,
-eating a snack (a fanfare for a favorite, a chime when the meter fills), each power
+eating a snack (a fanfare for a favorite), the item roulette and where it lands (a chime
+for the power), boost pads, slipping on a peel, each item and each power
 (every one sounds different), spinning someone out, getting spun out, hitting the
 border, bumping a kart, each lap (a jingle for the last one) and the finish (a bigger
 one for winning). Pro driving adds the hop, a blip as the sparks change color, the boost
@@ -126,8 +148,9 @@ a new pick afterwards. Everyone else waits. **Leave** goes
 back to racing alone.
 
 In a race with friends, the people start at the back of the grid in the order they joined,
-host first. The remaining pets are rivals. Powers work on everyone: Gaming Knockout, the
-ball, cakes and Brave Mode spin out a friend just like a rival. Snacks are each iPad's own,
+host first. The remaining pets are rivals. Powers and items work on everyone: Gaming
+Knockout, the balls, cherries, peels, cakes and Brave Mode spin out a friend just like a
+rival. Snacks are each iPad's own,
 so a snack a friend eats may still be there on your screen.
 
 If a friend leaves or drops off, their kart carries on as a rival. If the host leaves, the

@@ -2,7 +2,9 @@
 
 A kart racer for Ruby (9) and Zachary (7). You pick one of the nine pets from the
 character cards and race the other eight around one of six tracks: a park, a backyard and a kitchen counter, or the harder snowy mountain, bakery and toy room. Each pet drives a kart
-made from their favorite food and has one **power** taken from their card.
+made from their favorite food and has one **power** taken from their card. Snacks on the track
+give **items**: a banana peel, a cherry, a hot pepper, or now and then your pet's power. Boost
+pads on the straights give a burst of speed.
 
 It's the third game in this repo, after [Snack Attack](../snack-attack/) and
 [Pet Quest](../pet-quest/). Unlike those, it's 3D (three.js), drawn to look like the cards:

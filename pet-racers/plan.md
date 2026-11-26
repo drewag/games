@@ -22,12 +22,14 @@ match it.
 - [x] Sound: engine, drift and off-road loops, effects for snacks, powers, bonks, laps, finish; mute
 - [x] Harder tracks: Snow, Bakery, Toy Room; pick screen in two steps, pet then track
 - [x] Pro driving: Go/Back/Hop, drifting with blue, orange and purple boosts, rocket start
+- [x] Items from snacks (Banana Peel, Cherry, Hot Pepper, the pet's power) with a spare; boost pads
 
 ## Next
 
 - [ ] Play it on the iPad and tune speeds and frame rate
 - [ ] Race the harder tracks on the iPad: are they hard but fair? Tune widths and corners
 - [ ] Try Pro driving on the iPad: button layout, drift tightness, spark times, boost size
+- [ ] Items on the iPad: odds of the power, peel and cherry sizes, where the Spare button sits
 - [ ] Race with three or more real iPads: check smoothness and Wi-Fi drops
 
 ## Later

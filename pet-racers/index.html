@@ -40,15 +40,6 @@
     position: absolute; top: calc(12px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
     padding: 6px 22px; font-size: 28px; white-space: nowrap; pointer-events: none;
   }
-  #meter {
-    position: absolute; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right));
-    display: flex; gap: 6px; padding: 8px 10px; pointer-events: none;
-  }
-  #meter i {
-    width: 26px; height: 18px; border: 3px solid var(--ink); border-radius: 26px 26px 4px 4px / 22px 22px 4px 4px;
-    transform: rotate(180deg); background: transparent;
-  }
-  #meter i.on { background: #f2c14e; }
   .pad { position: absolute; bottom: calc(20px + env(safe-area-inset-bottom)); display: flex; gap: 18px; }
   #steer { left: calc(20px + env(safe-area-inset-left)); }
   #act, #pro { right: calc(20px + env(safe-area-inset-right)); }
@@ -61,8 +52,16 @@
   }
   .btn.down { transform: translate(2px, 3px); box-shadow: 1px 1px 0 rgba(90, 50, 20, 0.25); }
   #look { width: 84px; height: 84px; align-self: end; font-size: 20px; line-height: 1.1; text-align: center; }
-  #power { width: 150px; font-size: 24px; line-height: 1.1; text-align: center; opacity: 0.45; }
-  #power.ready { opacity: 1; background: #ffe58a; animation: pulse 0.6s ease-in-out infinite alternate; }
+  #power { width: 150px; font-size: 22px; line-height: 1.05; text-align: center; opacity: 0.45; }
+  #power b, #spare b { display: block; font-size: 40px; font-weight: normal; line-height: 1.1; }
+  #power.ready { opacity: 1; background: #fffdf6; }
+  #power.special { background: #ffe58a; animation: pulse 0.6s ease-in-out infinite alternate; }
+  #power.rolling b { animation: roll 0.12s steps(2) infinite; }
+  @keyframes roll { to { transform: translateY(-4px) rotate(8deg); } }
+  #spare { width: 72px; height: 72px; align-self: start; font-size: 13px; line-height: 1; text-align: center; opacity: 0.45; }
+  #spare b { font-size: 30px; }
+  #spare.ready { opacity: 1; }
+  #spare.special { background: #ffe58a; }
   @keyframes pulse { to { transform: scale(1.06) rotate(-2deg); } }
   #big {
     position: absolute; top: 34%; left: 50%; transform: translate(-50%, -50%);
@@ -151,13 +150,13 @@
   <a id="home" class="drawn" href="../" aria-label="Back to games">&#8962;</a>
   <button id="mute" class="drawn" aria-label="Sound on or off"></button>
   <div id="hud" class="drawn hidden"></div>
-  <div id="meter" class="drawn hidden"><i></i><i></i><i></i></div>
   <div id="steer" class="pad hidden">
     <div id="left" class="btn drawn" data-hold="left">&#9664;</div>
     <div id="right" class="btn drawn" data-hold="right">&#9654;</div>
   </div>
   <div id="act" class="pad hidden">
     <div id="look" class="btn drawn" data-hold="look">Look<br>back</div>
+    <div id="spare" class="btn drawn" aria-label="Spare: tap to swap"></div>
     <div id="power" class="btn drawn"></div>
   </div>
   <div id="pro" class="pad hidden">
@@ -961,7 +960,8 @@ for (const r of RACERS) {
   Object.assign(r, {
     pos: new V3(), heading: 0, speed: 0, spin: 0, spinAngle: 0,
     s: 0, lat: 0, skill: 0.9, phase: 0,                                     // rivals
-    steer: 0, idx: 0, lap: 1, meter: 0, wallCd: 0, rush: 0, nibble: 0, brave: 0,  // people
+    steer: 0, idx: 0, lap: 1, item: null, spare: null, rollT: 0, wallCd: 0, rush: 0, nibble: 0, brave: 0,  // people
+    padT: 0, padCd: 0,                                                      // boost pads
     hopT: 0, hopY: 0, hopHeld: false, hopWas: false, drift: 0, driftLv: 0, driftYaw: 0,  // Pro driving
     charge: 0, boost: 0, stall: 0, gasAt: null,
     netS: 0, netLat: 0, remote: null,                                       // over the network
@@ -1000,6 +1000,8 @@ function headingAt(f) {
   const t = TT[Math.floor(wrap(f))];
   return Math.atan2(t.x, t.z);
 }
+
+const angleTo = (from, to) => { const d = to - from; return Math.atan2(Math.sin(d), Math.cos(d)); };
 
 // Is p within `d` of the road's centre line anywhere?
 function nearTrack(p, d) {
@@ -1336,6 +1338,22 @@ function tunnels(parts, hills) {
   return inTunnel;
 }
 
+// Boost pads go where the road runs straightest: four per track, spread out,
+// swapping between the middle and the sides.
+const PAD_LEN = 6, PAD_W = 4.4;
+function findPads() {
+  const turn = [...Array(N)].map((_, i) => Math.abs(angleTo(headingAt(i - 20), headingAt(i + 20))));
+  const order = [...Array(N).keys()].filter((i) => i > 40 && i < N - 20).sort((a, b) => turn[a] - turn[b]);
+  const pads = [], lats = [0, -0.45, 0.45], apart = N / 6;
+  for (const f of order) {
+    if (pads.length === 4 || turn[f] > 0.35) break;
+    if (pads.some((p) => Math.min(wrap(f - p.f), wrap(p.f - f)) < apart)) continue;
+    pads.push({ f, lat: 0 });
+  }
+  pads.sort((a, b) => a.f - b.f).forEach((p, k) => { p.lat = lats[k % 3] * HALF; });
+  return pads;
+}
+
 function buildTrack(def) {
   const parts = [];
   const r = rng(def.name.length * 97 + 12);
@@ -1361,6 +1379,18 @@ function buildTrack(def) {
     strip(HALF, HALF + 1.2, stripe, 0.05);
     if (i < 3) {                                           // checkered start line
       for (let k = 0; k < 2 * HALF; k++) strip(-HALF + k, -HALF + k + 1, (k + i) % 2 ? '#2a2228' : '#fffdf6', 0.06);
+    }
+  }
+  // Boost pads on the straights, drawn on the road: orange with yellow arrows.
+  def.pads = findPads();
+  for (const pad of def.pads) {
+    const step = N / TL, w = PAD_W / 2, at = (a, l) => trackPoint(pad.f + a * step, pad.lat + l);
+    const h = PAD_LEN / 2;
+    quad(at(-h, -w), at(-h, w), at(h, w), at(h, -w), '#ff6a00', 0.07);
+    for (const a0 of [-h + 0.2, -h + 1.8, -h + 3.4]) {
+      for (const side of [-1, 1]) {             // one arm of a chevron pointing ahead
+        quad(at(a0, side * (w - 0.4)), at(a0 + 0.8, side * (w - 0.4)), at(a0 + 2.3, 0), at(a0 + 1.5, 0), '#fffdf6', 0.08);
+      }
     }
   }
   const road = new THREE.BufferGeometry();
@@ -1527,14 +1557,40 @@ const plusGeo = merge([
 ]);
 const pluses = [];
 
+// The items anyone can get from a snack: a banana peel dropped behind, a
+// cherry thrown straight ahead.
+const peelGeo = merge([
+  place(paint(sphere(8, 6), '#ffd93b'), { p: [0, 0.18, 0], s: [0.42, 0.3, 0.42] }),
+  ...[0, 1, 2].map((k) => place(paint(sphere(8, 6), '#ffe14d'),
+    { p: [Math.sin(k * 2.1) * 0.55, 0.08, Math.cos(k * 2.1) * 0.55], r: [0, k * 2.1, 0], s: [0.28, 0.1, 0.62] })),
+  place(paint(new THREE.CylinderGeometry(0.06, 0.1, 0.3, 6), '#6b4a1e'), { p: [0, 0.5, 0] }),
+]);
+const peels = [];
+const cherryGeo = merge([
+  place(paint(sphere(9, 7), '#d8232f'), { p: [-0.32, 0, 0], s: [0.42, 0.42, 0.42] }),
+  place(paint(sphere(9, 7), '#e53935'), { p: [0.32, 0.05, 0.1], s: [0.42, 0.42, 0.42] }),
+  place(paint(new THREE.CylinderGeometry(0.04, 0.04, 0.8, 5), '#4f9a3a'), { p: [-0.16, 0.6, 0], r: [0, 0, -0.5] }),
+  place(paint(new THREE.CylinderGeometry(0.04, 0.04, 0.8, 5), '#4f9a3a'), { p: [0.16, 0.62, 0.05], r: [0, 0, 0.5] }),
+]);
+
 let fxCount = 0;
 const newId = () => `${player.name}-${fxCount++}`;
 
-function addBall(owner, id, f, lat, latVel) {
-  const m = mesh(ballGeo);
-  m.scale.setScalar(0.6);
+// A ball rolls down the road and spins out the first kart it touches: Choco's
+// Sports Ball bounces off the hedges; a cherry goes straight and quicker.
+function addBall(owner, id, f, lat, latVel, kind = 'ball') {
+  const cherry = kind === 'cherry';
+  const m = mesh(cherry ? cherryGeo : ballGeo);
+  m.scale.setScalar(cherry ? 1 : 0.6);
   scene.add(m);
-  balls.push({ id, owner, m, life: 5, f, lat, latVel });
+  balls.push({ id, owner, m, life: cherry ? 3 : 5, f, lat, latVel, speed: cherry ? 54 : 42, cherry });
+}
+function addPeel(owner, id, x, z) {
+  const m = mesh(peelGeo);
+  m.position.set(x, 0, z);
+  m.rotation.y = Math.random() * Math.PI * 2;
+  scene.add(m);
+  peels.push({ id, owner, m, life: 40, armed: 0.6 });
 }
 function addCake(owner, id, x, z) {
   const m = mesh(cakeGeo);
@@ -1580,13 +1636,13 @@ function removeFx(list, k) {
   list.splice(k, 1);
 }
 function removeFxById(id) {
-  for (const list of [balls, cakes, pluses]) {
+  for (const list of [balls, cakes, pluses, peels]) {
     const k = list.findIndex((o) => o.id === id);
     if (k >= 0) removeFx(list, k);
   }
 }
 function clearFx() {
-  for (const list of [balls, cakes, pluses, rings]) while (list.length) removeFx(list, 0);
+  for (const list of [balls, cakes, pluses, rings, peels]) while (list.length) removeFx(list, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -1712,6 +1768,14 @@ const SFX = {
   spark: (lv) => tone([0, 880, 1175, 1568][lv], 0, 0.1, 'triangle', 0.06),
   boost: () => { noise(0, 0.5, 0.1, 500, 'bandpass', 3000); tone(200, 0, 0.4, 'sawtooth', 0.04, 500); },
   stall: () => [0, 0.15, 0.3].forEach((d) => noise(d, 0.12, 0.1, 300, 'lowpass')),
+  roll: () => tone(600 + Math.random() * 600, 0, 0.04, 'square', 0.03),
+  got: () => { tone(784, 0, 0.08, 'triangle', 0.07); tone(1175, 0.07, 0.14, 'triangle', 0.07); },
+  pad: () => { noise(0, 0.35, 0.1, 800, 'bandpass', 4000); tone(400, 0, 0.3, 'square', 0.04, 900); },
+  slip: () => { tone(900, 0, 0.35, 'sine', 0.08, 200); noise(0.05, 0.2, 0.05, 2000); },
+  // the items
+  'Banana Peel': () => { noise(0, 0.12, 0.08, 500, 'lowpass'); tone(250, 0, 0.12, 'sine', 0.08, 120); },
+  Cherry: () => { tone(300, 0, 0.12, 'triangle', 0.09, 700); noise(0, 0.06, 0.08, 1500); },
+  'Hot Pepper': () => { noise(0, 0.6, 0.12, 400, 'bandpass', 3500); tone(180, 0, 0.5, 'sawtooth', 0.05, 600); },
   // one for each power
   'Gaming Knockout': () => { tone(120, 0, 0.5, 'sine', 0.15, 40); noise(0, 0.4, 0.08, 600, 'lowpass'); },
   'Speed Eating': () => [0, 0.08, 0.16, 0.24, 0.32].forEach((d) => tone(500 + d * 1500, d, 0.06, 'square', 0.05, 300)),
@@ -1761,7 +1825,8 @@ function resetRace() {
     trackPoint(f, lat, r.pos);
     Object.assign(r, { heading: headingAt(f), speed: 0, spin: 0, spinAngle: 0,
       s: (f / N) * TL, lat, netS: (f / N) * TL, netLat: lat, skill: skills[k] || 0.9, phase: k * 1.7,
-      steer: 0, idx: Math.floor(wrap(f)), lap: 0, meter: 0, rush: 0, nibble: 0, brave: 0, remote: null,
+      steer: 0, idx: Math.floor(wrap(f)), lap: 0, item: null, spare: null, rollT: 0, rush: 0, nibble: 0, brave: 0, remote: null,
+      padT: 0, padCd: 0,
       hopT: 0, hopY: 0, hopHeld: false, drift: 0, driftLv: 0, driftYaw: 0, charge: 0, boost: 0, stall: 0, gasAt: null });
   });
   for (const p of snacks) { p.gone = 0; p.m.visible = true; }
@@ -1782,7 +1847,6 @@ function findIdx(pos, guess) {
 
 const fwdOf = (r) => new V3(Math.sin(r.heading), 0, Math.cos(r.heading));
 const latOf = (pos, i) => pos.clone().sub(TP[i]).dot(TR[i]);
-const angleTo = (from, to) => { const d = to - from; return Math.atan2(Math.sin(d), Math.cos(d)); };
 
 // Pro driving, after Mario Kart: hold Go to drive, Back to brake and reverse.
 // Tap Hop for a little hop; land still holding it while steering and the kart
@@ -1853,6 +1917,15 @@ function launch() {
   }
 }
 
+// Is a kart at track sample `f`, `lat` from the middle, on a boost pad?
+function onPad(f, lat) {
+  const reach = (PAD_LEN / 2) * (N / TL);
+  return track.pads.some((p) => {
+    const d = wrap(f - p.f);
+    return Math.min(d, N - d) < reach && Math.abs(lat - p.lat) < PAD_W / 2 + 0.4;
+  });
+}
+
 function updatePlayer(dt, canDrive) {
   const me = player;
   const want = (input.right ? 1 : 0) - (input.left ? 1 : 0);
@@ -1913,6 +1986,13 @@ function updatePlayer(dt, canDrive) {
     if (me.wallCd <= 0) { me.speed *= 0.7; me.wallCd = 0.5; puff(me.pos.clone().setY(0.5)); sfx('wall'); }
   }
 
+  // Boost pads.
+  me.padCd -= dt;
+  if (onPad(j, lat2) && me.hopY < 0.3) {
+    me.boost = Math.max(me.boost, 1.1);
+    if (me.padCd <= 0 && canDrive) { sfx('pad'); me.padCd = 0.6; }
+  }
+
   if (prevIdx > N * 0.75 && me.idx < N * 0.25) {
     me.lap++;
     if (state === 'race' && me.lap === LAPS) sfx('finalLap');
@@ -1953,8 +2033,10 @@ function updateRivals(dt, canDrive) {
     const gap = ours - progressOf(r);
     const band = THREE.MathUtils.clamp(1 + (gap / N) * 1.2, 0.82, 1.12);
     let target = canDrive ? MAX_SPEED * r.skill * band * (track.rivals || 1) : 0;
+    if (onPad((r.s / TL) * N, r.lat)) r.padT = 1;
+    if (r.padT > 0 && canDrive) { target = Math.max(target, MAX_SPEED * 1.25); r.padT -= dt; }
     if (r.spin > 0) target *= 0.25;
-    r.speed += (target - r.speed) * Math.min(1, dt * (target > r.speed ? 0.8 : 3));
+    r.speed += (target - r.speed) * Math.min(1, dt * (target > r.speed ? (r.padT > 0 ? 3 : 0.8) : 3));
     r.s += r.speed * dt;
     const wantLat = 3.2 * Math.sin(r.s * 0.013 + r.phase) + 1.2 * Math.sin(r.s * 0.041 + r.phase * 2);
     r.lat += (wantLat - r.lat) * Math.min(1, dt * 0.8);
@@ -2064,13 +2146,40 @@ function updateSnacks(dt, t) {
   }
 }
 
-function eat(food) {
-  const favs = [].concat(player.food), before = player.meter;
-  player.meter = Math.min(3, player.meter + (favs.includes(food) ? 2 : 1));
-  if (player.meter >= 3 && before < 3) sfx('full');
-  else sfx(favs.includes(food) ? 'fav' : 'snack');
-  if (player.name === 'Duffy') player.nibble = 0.6;     // Speed Eating: every bite helps
+// Every snack gives an item, if there's a free slot: the one in hand, then the
+// spare. A favorite food gives the pet's Power half the time, any other snack
+// now and then. Further back in the race, the Power and the Hot Pepper come up
+// more and the peel less.
+const ITEMS = {
+  'Banana Peel': { icon: '🍌', label: 'Banana<br>Peel' },
+  Cherry: { icon: '🍒', label: 'Cherry' },
+  'Hot Pepper': { icon: '🌶️', label: 'Hot<br>Pepper' },
+  power: { icon: '★', label: '' },                       // the pet's Power
+};
+function rollItem(food) {
+  const fav = [].concat(player.food).includes(food);
+  const back = (placeOf(player) - 1) / (RACERS.length - 1);   // 0 in front, 1 at the back
+  if (Math.random() < (fav ? 0.5 : 0.1 + back * 0.25)) return 'power';
+  const w = [['Banana Peel', 1.2 - back * 0.8], ['Cherry', 1], ['Hot Pepper', 0.5 + back * 0.9]];
+  let k = Math.random() * w.reduce((a, [, n]) => a + n, 0);
+  for (const [name, n] of w) if ((k -= n) < 0) return name;
+  return 'Cherry';
 }
+function eat(food) {
+  const favs = [].concat(player.food);
+  sfx(favs.includes(food) ? 'fav' : 'snack');
+  if (player.name === 'Duffy') player.nibble = 0.6;     // Speed Eating: every bite helps
+  if (state !== 'race') return;
+  if (!player.item) { player.item = rollItem(food); player.rollT = 0.6; }
+  else if (!player.spare) { player.spare = rollItem(food); sfx(player.spare === 'power' ? 'full' : 'got'); }
+}
+// Tap the spare to swap it with the item in hand.
+function swapItems() {
+  if (state !== 'race' || !player.spare || player.rollT > 0) return;
+  [player.item, player.spare] = [player.spare, player.item];
+  sfx('tap');
+}
+const itemName = (it) => (it === 'power' ? player.power : it);
 
 // --- the powers ------------------------------------------------------------
 // The nearest kart ahead (in track points), within `reach` world units.
@@ -2083,6 +2192,27 @@ function nextAhead(reach) {
   }
   return best && { r: best, gap };
 }
+
+const BASICS = {
+  'Banana Peel'() {
+    const at = player.pos.clone().addScaledVector(fwdOf(player), -2.6);
+    const id = newId();
+    addPeel(player, id, at.x, at.z);
+    send({ t: 'fx', k: 'peel', o: player.name, id, x: at.x, z: at.z });
+    showPop('Peel!');
+  },
+  Cherry() {
+    const b = { id: newId(), f: player.idx + 3, lat: latOf(player.pos, player.idx), latVel: 0, kind: 'cherry' };
+    addBall(player, b.id, b.f, b.lat, 0, 'cherry');
+    send({ t: 'fx', k: 'ball', o: player.name, ...b });
+    showPop('Cherry!');
+  },
+  'Hot Pepper'() {
+    player.boost = Math.max(player.boost, 1.6);
+    for (let k = 0; k < 8; k++) puff(player.pos.clone().setY(0.6).addScaledVector(fwdOf(player), -1.4), k % 2 ? '#e53935' : '#ff8a1c', 0.5);
+    showPop('Hot hot hot!');
+  },
+};
 
 const POWERS = {
   'Gaming Knockout'() {
@@ -2155,11 +2285,15 @@ const POWERS = {
   },
 };
 
+// Use the item in hand; the spare moves up into its place.
 function usePower() {
-  if (player.meter < 3 || state !== 'race') return;
-  player.meter = 0;
-  sfx(player.power);
-  POWERS[player.power]();
+  const it = player.item;
+  if (!it || player.rollT > 0 || state !== 'race') return;
+  player.item = player.spare;
+  player.spare = null;
+  sfx(itemName(it));
+  if (it === 'power') POWERS[player.power]();
+  else BASICS[it]();
 }
 
 function updateEffects(dt, t) {
@@ -2192,7 +2326,7 @@ function updateEffects(dt, t) {
   for (let k = balls.length - 1; k >= 0; k--) {
     const b = balls[k];
     b.life -= dt;
-    b.f += (42 * dt / TL) * N;
+    b.f += (b.speed * dt / TL) * N;
     b.lat += b.latVel * dt;
     if (Math.abs(b.lat) > WALL - 1) {                 // bounce off the hedges
       b.lat = Math.sign(b.lat) * (WALL - 1);
@@ -2201,7 +2335,8 @@ function updateEffects(dt, t) {
     }
     b.latVel *= Math.pow(0.6, dt);
     trackPoint(b.f, b.lat, b.m.position).setY(0.6);
-    b.m.rotation.x += dt * 20;
+    if (b.cherry) b.m.rotation.y += dt * 14;
+    else b.m.rotation.x += dt * 20;
     let hit = false;
     if (b.owner === player) {
       for (const r of others()) {
@@ -2213,6 +2348,25 @@ function updateEffects(dt, t) {
       puff(b.m.position.clone(), b.owner.color);
       removeFx(balls, k);
     }
+  }
+  for (let k = peels.length - 1; k >= 0; k--) {
+    // Anyone can slip on a peel, even whoever dropped it. Each iPad checks its
+    // own racer; the owner checks the rivals.
+    const c = peels[k];
+    c.life -= dt;
+    c.armed -= dt;
+    let hit = false;
+    if (c.armed <= 0 && state === 'race' && player.spin <= 0 && player.pos.distanceTo(c.m.position) < 1.6) {
+      hit = true;
+      if (player.brave <= 0) { getHit('Slip!'); sfx('slip'); }
+    }
+    if (!hit && c.owner === player) {
+      for (const r of rivals) {
+        if (r.pos.distanceTo(c.m.position) < 1.6 && spinOut(r, 'Slip!')) { hit = true; break; }
+      }
+    }
+    if (hit) { send({ t: 'gone', id: c.id }); puff(c.m.position.clone().setY(0.4), '#ffe14d'); }
+    if (hit || c.life <= 0) removeFx(peels, k);
   }
   for (let k = cakes.length - 1; k >= 0; k--) {
     const c = cakes[k];
@@ -2472,7 +2626,8 @@ function showFx(m) {
   const owner = racerNamed(m.o);
   if (!owner || owner === player) return;
   if (m.k === 'ring') burstRing(owner);
-  if (m.k === 'ball') addBall(owner, m.id, m.f, m.lat, m.latVel);
+  if (m.k === 'ball') addBall(owner, m.id, m.f, m.lat, m.latVel, m.kind);
+  if (m.k === 'peel') addPeel(owner, m.id, m.x, m.z);
   if (m.k === 'cake') addCake(owner, m.id, m.x, m.z);
   if (m.k === 'plus') addPlus(owner, m.id, m.f, m.lat, m.target);
   if (m.k === 'hack') hackFx(owner, new V3(m.x, 0, m.z), new V3(m.x2, 0, m.z2));
@@ -2571,7 +2726,6 @@ function setState(s) {
   state = s;
   const racing = s === 'countdown' || s === 'race';
   $('hud').classList.toggle('hidden', !racing && s !== 'done');
-  $('meter').classList.toggle('hidden', !racing);
   $('steer').classList.toggle('hidden', !racing);
   $('act').classList.toggle('hidden', !racing);
   $('pro').classList.toggle('hidden', !racing || !pro);
@@ -2594,7 +2748,6 @@ function setPlayer(r) {
   try { localStorage.setItem(PICK_KEY, r.name); } catch (e) { /* private mode */ }
   $('pickName').textContent = r.name;
   $('pickKart').textContent = `${r.kart} · ${r.power}`;
-  $('power').innerHTML = r.power.replace(' ', '<br>') + '!';
   resetRace();
   updatePickUi();
 }
@@ -2753,10 +2906,26 @@ function finish() {
   setState('done');
 }
 
-function updateHud() {
+function updateHud(dt) {
   $('hud').textContent = `Lap ${Math.min(Math.max(player.lap, 1), LAPS)}/${LAPS}  ·  ${ORDINAL[placeOf(player)]}`;
-  [...$('meter').children].forEach((el, k) => el.classList.toggle('on', k < player.meter));
-  $('power').classList.toggle('ready', player.meter >= 3);
+  const me = player;
+  if (me.rollT > 0) {
+    // The item spins through the choices before it lands.
+    const before = me.rollT;
+    me.rollT = Math.max(0, me.rollT - dt);
+    if (Math.floor(before * 14) !== Math.floor(me.rollT * 14)) sfx('roll');
+    if (me.rollT === 0) sfx(me.item === 'power' ? 'full' : 'got');
+  }
+  const show = (it) => it === 'power' ? `<b>★</b>${player.power.replace(' ', '<br>')}!` : it ? `<b>${ITEMS[it].icon}</b>${ITEMS[it].label}` : '';
+  const shown = me.rollT > 0 ? `<b>${Object.values(ITEMS)[Math.floor(me.rollT * 14) % 4].icon}</b>` : show(me.item);
+  if ($('power').dataset.shown !== shown) { $('power').innerHTML = shown; $('power').dataset.shown = shown; }
+  $('power').classList.toggle('ready', !!me.item);
+  $('power').classList.toggle('rolling', me.rollT > 0);
+  $('power').classList.toggle('special', me.item === 'power' && me.rollT <= 0);
+  const spare = me.spare === 'power' ? '<b>★</b>' : me.spare ? `<b>${ITEMS[me.spare].icon}</b>` : 'spare';
+  if ($('spare').dataset.shown !== spare) { $('spare').innerHTML = spare; $('spare').dataset.shown = spare; }
+  $('spare').classList.toggle('ready', !!me.spare);
+  $('spare').classList.toggle('special', me.spare === 'power');
 }
 
 $('go').addEventListener('click', startRace);
@@ -2797,6 +2966,7 @@ for (const ev of ['pointerup', 'pointercancel']) {
 }
 window.addEventListener('blur', () => { touches.clear(); keysDown.clear(); refreshInput(); });
 $('power').addEventListener('pointerdown', (e) => { e.preventDefault(); usePower(); });
+$('spare').addEventListener('pointerdown', (e) => { e.preventDefault(); swapItems(); });
 
 const KEYS = {
   ArrowLeft: 'left', a: 'left', ArrowRight: 'right', d: 'right',
@@ -2805,6 +2975,7 @@ const KEYS = {
 const keyOf = (e) => KEYS[e.key.length === 1 ? e.key.toLowerCase() : e.key];
 window.addEventListener('keydown', (e) => {
   if (keyOf(e)) { keysDown.add(keyOf(e)); refreshInput(); }
+  if (e.key.toLowerCase() === 'e' && !e.repeat) swapItems();
   if (e.key === ' ' || e.key === 'Enter') {
     const canStart = !isGuest();
     if (state === 'race') usePower();
@@ -2834,7 +3005,7 @@ window.autoUpdateIsIdle = () => (state === 'title' || state === 'done') && !net.
 
 // For testing from the console.
 window.petRacers = {
-  RACERS, TRACKS, chooseTrack, input, setPro, startRace, usePower, pick, placeOf, progressOf, cakes, balls, pluses, net, makeRoom, joinRoom, leaveRoom,
+  RACERS, TRACKS, trackPoint, headingAt, chooseTrack, input, setPro, startRace, usePower, swapItems, eat, pick, placeOf, progressOf, cakes, balls, pluses, peels, net, makeRoom, joinRoom, leaveRoom,
   get player() { return player; }, get friends() { return friends; }, get rivals() { return rivals; }, get state() { return state; },
 };
 
@@ -2880,7 +3051,7 @@ function frame(now) {
   updateCamera(dt, t);
   netTick(now);
   updateSound();
-  if (state !== 'title') updateHud();
+  if (state !== 'title') updateHud(dt);
   if (popTimer > 0) { popTimer -= dt; if (popTimer <= 0) $('pop').style.opacity = 0; }
 
   render(t);
