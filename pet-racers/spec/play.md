@@ -21,9 +21,12 @@ The game is played in landscape on an iPad. On-screen buttons sit under the thum
 - **◀ ▶**, bottom-left, held to steer
 - **Power**, bottom-right, labeled with the pet's power name. It lights up and wobbles
   when the meter is full.
+- **Look back**, beside Power, held to look behind: the camera flips to face back down
+  the road from in front of the kart, and snaps back when let go.
 
 With neither steering button held, the kart eases toward the road ahead on its own. That
-makes steering a correction, not a constant job. Arrow keys and space work on a computer.
+makes steering a correction, not a constant job. Arrow keys and space work on a computer,
+and C or Q looks back.
 
 ### Pro driving
 

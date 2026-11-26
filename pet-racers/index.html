@@ -56,6 +56,7 @@
     touch-action: none; cursor: pointer;
   }
   .btn.down { transform: translate(2px, 3px); box-shadow: 1px 1px 0 rgba(90, 50, 20, 0.25); }
+  #look { width: 84px; height: 84px; align-self: end; font-size: 20px; line-height: 1.1; text-align: center; }
   #power { width: 150px; font-size: 24px; line-height: 1.1; text-align: center; opacity: 0.45; }
   #power.ready { opacity: 1; background: #ffe58a; animation: pulse 0.6s ease-in-out infinite alternate; }
   @keyframes pulse { to { transform: scale(1.06) rotate(-2deg); } }
@@ -147,6 +148,7 @@
     <div id="right" class="btn drawn" data-hold="right">&#9654;</div>
   </div>
   <div id="act" class="pad hidden">
+    <div id="look" class="btn drawn" data-hold="look">Look<br>back</div>
     <div id="power" class="btn drawn"></div>
   </div>
   <div id="pro" class="pad hidden">
@@ -1353,7 +1355,7 @@ function clearFx() {
 // ---------------------------------------------------------------------------
 const LAPS = 3;
 const MAX_SPEED = 26;
-const input = { left: false, right: false, gas: false, back: false, hop: false };
+const input = { left: false, right: false, gas: false, back: false, hop: false, look: false };
 let pro = false;              // Pro driving: gas, hop and drift, no steering help
 let player = RACERS[0];
 let friends = [];             // other people's racers, when racing friends
@@ -2116,6 +2118,13 @@ function updateCamera(dt, t) {
   const k = 1 - Math.exp(-dt * 5);
   camPos.lerp(wantPos, k);
   camLook.lerp(wantLook, k);
+  if (input.look && state !== 'done') {
+    // Looking behind: from just in front of the kart, back down the road.
+    // The chase camera keeps following, so letting go snaps straight back.
+    camera.position.copy(player.pos).addScaledVector(fwd, 5).setY(2.6);
+    camera.lookAt(player.pos.clone().addScaledVector(fwd, -4).setY(1.2));
+    return;
+  }
   camera.position.copy(camPos);
   camera.lookAt(camLook);
 }
@@ -2344,7 +2353,7 @@ $('power').addEventListener('pointerdown', (e) => { e.preventDefault(); usePower
 
 const KEYS = {
   ArrowLeft: 'left', a: 'left', ArrowRight: 'right', d: 'right',
-  ArrowUp: 'gas', w: 'gas', ArrowDown: 'back', s: 'back', Shift: 'hop', x: 'hop',
+  ArrowUp: 'gas', w: 'gas', ArrowDown: 'back', s: 'back', Shift: 'hop', x: 'hop', c: 'look', q: 'look',
 };
 const keyOf = (e) => KEYS[e.key.length === 1 ? e.key.toLowerCase() : e.key];
 window.addEventListener('keydown', (e) => {
