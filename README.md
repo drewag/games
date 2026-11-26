@@ -8,6 +8,7 @@ Each game lives in its own folder as a self-contained `index.html` (no build ste
 |---|---|---|
 | Snack Attack | [`snack-attack/`](snack-attack/) | https://drewag.github.io/games/snack-attack/ |
 | Pet Quest | [`pet-quest/`](pet-quest/) | https://drewag.github.io/games/pet-quest/ |
+| Pet Racers | [`pet-racers/`](pet-racers/) | https://drewag.github.io/games/pet-racers/ |
 
 ## Adding a game
 

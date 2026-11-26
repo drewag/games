@@ -13,10 +13,10 @@ match it.
 - [x] Mixed snacks (taco, sushi, ramen, popcorn); favorite food fills two segments
 - [x] Powers: Speed Eating, Sports Ball, Instant Cake, Brave Mode; effects in the pet's color
 - [x] Pick screen with the card scans; remember the last pet
+- [x] Listed on the games home page and in the root README
 
 ## Next
 
-- [ ] Add Pet Racers to the games home page and the root README
 - [ ] Play it on the iPad and tune speeds and frame rate
 
 ## Later
