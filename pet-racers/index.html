@@ -1502,9 +1502,12 @@ function updatePlayer(dt, canDrive) {
   let grip = THREE.MathUtils.clamp(Math.abs(me.speed) / MAX_SPEED, 0.25, 1);
   if (!easy) grip *= Math.min(1, Math.abs(me.speed) / 3);   // no turning on the spot
   if (me.drift) {
-    me.heading -= me.drift * 1.7 * (0.85 + 0.55 * me.steer * me.drift) * grip * dt;
+    // A drift is a slow, wide arc: half a full turn on its own, a bit less than
+    // a full turn steering in, nearly straight steering out.
+    me.heading -= me.drift * 1.7 * (0.5 + 0.35 * me.steer * me.drift) * grip * dt;
   } else {
-    me.heading -= me.steer * 1.7 * grip * (me.speed < 0 ? -1 : 1) * dt;
+    const air = me.hopT > 0 ? 0.5 : 1;                       // a hop only turns a little
+    me.heading -= me.steer * 1.7 * grip * air * (me.speed < 0 ? -1 : 1) * dt;
   }
 
   // Steering help: with no button held, ease toward the road ahead.
@@ -1618,7 +1621,7 @@ function syncRacers(t, dt = 0) {
   for (const r of RACERS) {
     r.group.position.copy(r.pos);
     r.group.rotation.y = r.heading;
-    r.driftYaw += (-r.drift * 0.45 - r.driftYaw) * Math.min(1, dt * 8);
+    r.driftYaw += (-r.drift * 0.35 - r.driftYaw) * Math.min(1, dt * 3);   // swing in gently
     r.body.rotation.y = r.spinAngle + r.driftYaw;
     r.body.position.y = Math.abs(Math.sin(t * 18 + r.phase)) * 0.05 * (Math.abs(r.speed) / MAX_SPEED) + r.hopY;
     r.pet.scale.setScalar(r.brave > 0 ? 1 + Math.sin(t * 20) * 0.06 : 1);
