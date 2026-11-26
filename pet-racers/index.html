@@ -90,11 +90,34 @@
   }
   #card h1 { margin: 0; font-size: 56px; font-weight: normal; }
   #card p { margin: 6px 0 16px; font-size: 22px; }
-  #go, #card button {
+  #go, #friendBtn, #card button {
     font: inherit; font-size: 32px; color: var(--ink); padding: 6px 36px; margin: 0 6px; cursor: pointer;
     background: #ffe58a;
   }
-  #card #other { background: var(--paper); }
+  #card #other, .plain { background: var(--paper) !important; }
+  .pc { position: relative; }
+  .pc span {
+    display: none; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-12deg);
+    background: #ffe58a; border: 3px solid var(--ink); padding: 2px 10px; font: inherit; font-size: 22px;
+  }
+  .pc.taken { opacity: 0.55; pointer-events: none; }
+  .pc.taken span { display: block; }
+  #netStatus { font-size: 20px; margin: -4px 0 10px; }
+  #net {
+    position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%);
+    padding: 20px 34px 24px; text-align: center; min-width: 340px;
+  }
+  #net h2 { margin: 0 0 6px; font-size: 40px; font-weight: normal; }
+  #net p { font-size: 22px; margin: 6px 0 16px; max-width: 420px; }
+  #net button {
+    font: inherit; font-size: 28px; color: var(--ink); padding: 6px 26px; margin: 6px; cursor: pointer;
+    background: #ffe58a;
+  }
+  #net .code { font-size: 96px; letter-spacing: 14px; line-height: 1.1; }
+  #net input {
+    font: inherit; font-size: 64px; width: 5.2em; text-align: center; letter-spacing: 12px; color: var(--ink);
+    border: 4px solid var(--ink); border-radius: 12px; background: #fff; margin: 8px 0 12px; padding: 0 0 0 12px;
+  }
   .hidden { display: none !important; }
 </style>
 </head>
@@ -117,16 +140,21 @@
   <div id="pick" class="drawn hidden">
     <div id="cards"></div>
     <div id="pickInfo"><span id="pickName"></span><span id="pickKart"></span></div>
+    <div id="netStatus" class="hidden"></div>
     <button id="go" class="drawn">Race!</button>
+    <button id="friendBtn" class="drawn plain">Race a friend</button>
   </div>
+  <div id="net" class="drawn hidden"></div>
   <div id="card" class="drawn hidden">
     <h1 id="result"></h1>
     <p id="sub"></p>
     <button id="again" class="drawn">Race again!</button>
     <button id="other" class="drawn">Pick a pet</button>
+    <p id="cardWait" class="hidden">Your friend picks what’s next.</p>
   </div>
 </div>
 
+<script src="vendor/peerjs.min.js"></script>
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js" } }
 </script>
@@ -756,7 +784,8 @@ for (const r of RACERS) {
   Object.assign(r, {
     pos: new V3(), heading: 0, speed: 0, spin: 0, spinAngle: 0,
     s: 0, lat: 0, skill: 0.9, phase: 0,                                     // rivals
-    steer: 0, idx: 0, lap: 1, meter: 0, wallCd: 0, rush: 0, nibble: 0, brave: 0,  // your racer
+    steer: 0, idx: 0, lap: 1, meter: 0, wallCd: 0, rush: 0, nibble: 0, brave: 0,  // people
+    netS: 0, netLat: 0, remote: null,                                       // over the network
   });
 }
 
@@ -931,13 +960,19 @@ const snacks = [];
 }
 
 // ---------------------------------------------------------------------------
-// Power effects
+// Power effects. Each one has an `owner`; only the owner's iPad decides what
+// it hits, the other iPad just shows it.
 // ---------------------------------------------------------------------------
 const ringGeo = new THREE.TorusGeometry(1, 0.18, 6, 40);
-const ring = mesh(paint(ringGeo.clone(), '#ffcf3f'));
-ring.rotation.x = Math.PI / 2;
-ring.visible = false;
-scene.add(ring);
+const ringGeos = {};
+const rings = [];
+function burstRing(owner) {
+  ringGeos[owner.color] ||= paint(ringGeo.clone(), owner.color);
+  const m = mesh(ringGeos[owner.color]);
+  m.rotation.x = Math.PI / 2;
+  scene.add(m);
+  rings.push({ m, t: 0, owner });
+}
 
 // One pool of puffs per color.
 const puffPools = {};
@@ -955,12 +990,9 @@ function puff(at, color = '#dccaa6', life = 0.6) {
   p.vel.set((Math.random() - 0.5) * 2, 1.5 + Math.random(), (Math.random() - 0.5) * 2);
 }
 
-const ball = mesh(paint(sphere(10, 7), (x, y, z) =>
-  ((Math.floor(Math.atan2(z, x) * 3 / Math.PI + 10) + (y > 0 ? 1 : 0)) % 2 ? '#7e4fd0' : '#fffdf6')));
-ball.scale.setScalar(0.6);
-ball.visible = false;
-scene.add(ball);
-const ballState = { life: 0, f: 0, lat: 0, latVel: 0 };
+const ballGeo = paint(sphere(10, 7), (x, y, z) =>
+  ((Math.floor(Math.atan2(z, x) * 3 / Math.PI + 10) + (y > 0 ? 1 : 0)) % 2 ? '#7e4fd0' : '#fffdf6'));
+const balls = [];
 
 function cakeParts() {
   return [
@@ -974,6 +1006,35 @@ function cakeParts() {
 const cakeGeo = merge(cakeParts());
 const cakes = [];
 
+let fxCount = 0;
+const newId = () => `${player.name}-${fxCount++}`;
+
+function addBall(owner, id, f, lat, latVel) {
+  const m = mesh(ballGeo);
+  m.scale.setScalar(0.6);
+  scene.add(m);
+  balls.push({ id, owner, m, life: 5, f, lat, latVel });
+}
+function addCake(owner, id, x, z) {
+  const m = mesh(cakeGeo);
+  m.position.set(x, 0, z);
+  scene.add(m);
+  cakes.push({ id, owner, m, life: 20 });
+}
+function removeFx(list, k) {
+  scene.remove(list[k].m);
+  list.splice(k, 1);
+}
+function removeFxById(id) {
+  for (const list of [balls, cakes]) {
+    const k = list.findIndex((o) => o.id === id);
+    if (k >= 0) removeFx(list, k);
+  }
+}
+function clearFx() {
+  for (const list of [balls, cakes, rings]) while (list.length) removeFx(list, 0);
+}
+
 // ---------------------------------------------------------------------------
 // The race
 // ---------------------------------------------------------------------------
@@ -981,31 +1042,37 @@ const LAPS = 3;
 const MAX_SPEED = 26;
 const input = { left: false, right: false };
 let player = RACERS[0];
+let friend = null;            // the other iPad's racer, when racing a friend
 let rivals = RACERS.slice(1);
+const isHuman = (r) => r === player || r === friend;
+const others = () => RACERS.filter((r) => r !== player);
+
+// This iPad drives the rivals unless it joined someone else's room.
+const drivesRivals = () => !net.conn || net.host;
 
 function progressOf(r) {
-  return r === player ? (r.lap - 1) * N + r.idx : (r.s / TL) * N;
+  return isHuman(r) ? (r.lap - 1) * N + r.idx : (r.s / TL) * N;
 }
 function placeOf(r) {
   return 1 + RACERS.filter((o) => o !== r && progressOf(o) > progressOf(r)).length;
 }
 
 function resetRace() {
-  rivals = RACERS.filter((r) => r !== player);
-  // Staggered grid behind the line; you start at the back.
-  const order = [...rivals, player];
+  rivals = RACERS.filter((r) => !isHuman(r));
+  // Staggered grid behind the line; people start at the back, the room's
+  // maker first, so both iPads agree on the order.
+  const humans = !friend ? [player] : net.host ? [player, friend] : [friend, player];
+  const order = [...rivals, ...humans];
   const skills = [0.94, 0.92, 0.9, 0.88];
   order.forEach((r, k) => {
     const f = -6 - k * 5, lat = k % 2 ? 3 : -3;
     trackPoint(f, lat, r.pos);
     Object.assign(r, { heading: headingAt(f), speed: 0, spin: 0, spinAngle: 0,
-      s: (f / N) * TL, lat, skill: skills[k] || 0.9, phase: k * 1.7,
-      steer: 0, idx: Math.floor(wrap(f)), lap: 0, meter: 0, rush: 0, nibble: 0, brave: 0 });
+      s: (f / N) * TL, lat, netS: (f / N) * TL, netLat: lat, skill: skills[k] || 0.9, phase: k * 1.7,
+      steer: 0, idx: Math.floor(wrap(f)), lap: 0, meter: 0, rush: 0, nibble: 0, brave: 0, remote: null });
   });
   for (const p of snacks) { p.gone = 0; p.m.visible = true; }
-  for (const c of cakes) scene.remove(c.m);
-  cakes.length = 0;
-  ballState.life = 0; ball.visible = false;
+  clearFx();
   raceTime = 0;
   syncRacers(0);
 }
@@ -1022,6 +1089,7 @@ function findIdx(pos, guess) {
 
 const fwdOf = (r) => new V3(Math.sin(r.heading), 0, Math.cos(r.heading));
 const latOf = (pos, i) => pos.clone().sub(TP[i]).dot(TR[i]);
+const angleTo = (from, to) => { const d = to - from; return Math.atan2(Math.sin(d), Math.cos(d)); };
 
 function updatePlayer(dt, canDrive) {
   const me = player;
@@ -1035,6 +1103,7 @@ function updatePlayer(dt, canDrive) {
   if (offroad && me.brave <= 0) target *= 0.55;
   if (me.rush > 0) target *= 1.4;
   else if (me.nibble > 0) target *= 1.15;
+  if (me.spin > 0) target *= 0.25;
   me.speed += (target - me.speed) * Math.min(1, dt * (target > me.speed ? (me.rush > 0 ? 3 : 0.9) : 2.5));
 
   const grip = THREE.MathUtils.clamp(me.speed / MAX_SPEED, 0.25, 1);
@@ -1043,9 +1112,7 @@ function updatePlayer(dt, canDrive) {
   // Steering help: with no button held, ease toward the road ahead.
   if (!want && me.speed > 1) {
     const aim = trackPoint(i + 14, THREE.MathUtils.clamp(lat, -HALF + 2, HALF - 2) * 0.6);
-    let diff = Math.atan2(aim.x - me.pos.x, aim.z - me.pos.z) - me.heading;
-    diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-    me.heading += diff * Math.min(1, dt * 1.6);
+    me.heading += angleTo(me.heading, Math.atan2(aim.x - me.pos.x, aim.z - me.pos.z)) * Math.min(1, dt * 1.6);
   }
   me.pos.x += Math.sin(me.heading) * me.speed * dt;
   me.pos.z += Math.cos(me.heading) * me.speed * dt;
@@ -1058,29 +1125,41 @@ function updatePlayer(dt, canDrive) {
   me.wallCd -= dt;
   if (Math.abs(lat2) > WALL) {
     me.pos.addScaledVector(TR[j], (Math.abs(lat2) - WALL) * -Math.sign(lat2));
-    let diff = Math.atan2(TT[j].x, TT[j].z) - me.heading;
-    diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-    me.heading += diff * Math.min(1, dt * 6);
+    me.heading += angleTo(me.heading, Math.atan2(TT[j].x, TT[j].z)) * Math.min(1, dt * 6);
     if (me.wallCd <= 0) { me.speed *= 0.7; me.wallCd = 0.5; puff(me.pos.clone().setY(0.5)); }
   }
 
   if (prevIdx > N * 0.75 && me.idx < N * 0.25) me.lap++;
   if (prevIdx < N * 0.25 && me.idx > N * 0.75) me.lap--;
 
-  const behind = me.pos.clone().setY(0.4).addScaledVector(fwdOf(me), -1.2);
-  if (offroad && me.brave <= 0 && me.speed > 5 && Math.random() < dt * 14) puff(behind);
-  if (me.rush > 0 && Math.random() < dt * 20) puff(behind, me.color, 0.4);
-  if (me.brave > 0 && Math.random() < dt * 24) puff(behind.setY(0.4 + Math.random()), me.color, 0.5);
+  if (offroad && me.brave <= 0 && me.speed > 5 && Math.random() < dt * 14) {
+    puff(me.pos.clone().setY(0.4).addScaledVector(fwdOf(me), -1.2));
+  }
   me.rush = Math.max(0, me.rush - dt);
   me.nibble = Math.max(0, me.nibble - dt);
   me.brave = Math.max(0, me.brave - dt);
+  me.spin = Math.max(0, me.spin - dt);
+  me.spinAngle = me.spin > 0 ? me.spinAngle + dt * 14 : 0;
 }
 
 function updateRivals(dt, canDrive) {
-  const mine = progressOf(player);
+  if (!drivesRivals()) {
+    // Follow the room maker's rivals, filling the gaps between messages.
+    for (const r of rivals) {
+      r.netS += r.speed * dt;
+      r.s += r.speed * dt;
+      r.s += (r.netS - r.s) * Math.min(1, dt * 4);
+      r.lat += (r.netLat - r.lat) * Math.min(1, dt * 6);
+      r.spin = Math.max(0, r.spin - dt);
+      r.spinAngle = r.spin > 0 ? r.spinAngle + dt * 14 : 0;
+    }
+    return;
+  }
+  const humans = RACERS.filter(isHuman);
+  const ours = humans.reduce((a, r) => a + progressOf(r), 0) / humans.length;
   for (const r of rivals) {
-    // Catch-up: ease off when far ahead of you, push when far behind.
-    const gap = mine - progressOf(r);
+    // Catch-up: ease off when far ahead of the people, push when far behind.
+    const gap = ours - progressOf(r);
     const band = THREE.MathUtils.clamp(1 + (gap / N) * 1.2, 0.82, 1.12);
     let target = canDrive ? MAX_SPEED * r.skill * band : 0;
     if (r.spin > 0) target *= 0.25;
@@ -1094,12 +1173,36 @@ function updateRivals(dt, canDrive) {
   }
 }
 
+// The friend's kart: last reported position, nudged forward by its speed.
+function updateFriend(dt) {
+  if (!friend || !friend.remote) return;
+  const n = friend.remote;
+  const age = Math.min(0.3, (performance.now() - n.at) / 1000);
+  const want = new V3(n.x + Math.sin(n.h) * n.v * age, 0, n.z + Math.cos(n.h) * n.v * age);
+  if (friend.pos.distanceTo(want) > 12) friend.pos.copy(want);
+  else friend.pos.lerp(want, Math.min(1, dt * 12));
+  friend.heading += angleTo(friend.heading, n.h) * Math.min(1, dt * 12);
+  friend.speed = n.v;
+  friend.spin = Math.max(0, friend.spin - dt);
+  friend.spinAngle = friend.spin > 0 ? friend.spinAngle + dt * 14 : 0;
+}
+
+// Spin out another racer. Whoever drives that racer gets told.
 function spinOut(r, text = 'Bonk!') {
-  if (r === player || r.spin > 0) return false;
+  if (r === player || r.spin > 0 || r.brave > 0) return false;
+  if (r === friend || !drivesRivals()) send({ t: 'spin', who: r.name, text });
   r.spin = 1.5;
   showPop(text);
   for (let k = 0; k < 5; k++) puff(r.pos.clone().setY(1.2), '#ffcf3f', 0.5);
   return true;
+}
+
+// Our own racer, hit by the friend's power.
+function getHit(text) {
+  if (player.spin > 0 || player.brave > 0) return;
+  player.spin = 1.5;
+  showPop(text);
+  for (let k = 0; k < 5; k++) puff(player.pos.clone().setY(1.2), '#ffcf3f', 0.5);
 }
 
 function syncRacers(t) {
@@ -1113,15 +1216,18 @@ function syncRacers(t) {
     r.group.rotation.y = r.heading;
     r.body.rotation.y = r.spinAngle;
     r.body.position.y = Math.abs(Math.sin(t * 18 + r.phase)) * 0.05 * (r.speed / MAX_SPEED);
+    r.pet.scale.setScalar(r.brave > 0 ? 1 + Math.sin(t * 20) * 0.06 : 1);
   }
-  const sp = player.speed / MAX_SPEED;
-  player.body.rotation.z = -player.steer * 0.06 * sp;
-  player.pet.rotation.z = -player.steer * 0.18;
-  player.pet.rotation.y = player.steer * -0.15;
-  const glow = player.brave > 0 ? 1 + Math.sin(t * 20) * 0.06 : 1;
-  player.pet.scale.setScalar(glow);
+  for (const r of [player, friend]) {
+    if (!r) continue;
+    const sp = r.speed / MAX_SPEED;
+    r.body.rotation.z = -r.steer * 0.06 * sp;
+    r.pet.rotation.z = -r.steer * 0.18;
+    r.pet.rotation.y = r.steer * -0.15;
+  }
 
-  // Bumping: push apart, never crash. Brave Mode spins out whoever it touches.
+  // Bumping: push apart, never crash. Each iPad only moves what it drives.
+  // Brave Mode spins out whoever it touches.
   for (let a = 0; a < RACERS.length; a++) {
     for (let b = a + 1; b < RACERS.length; b++) {
       const A = RACERS[a], B = RACERS[b];
@@ -1132,7 +1238,7 @@ function syncRacers(t) {
       d.normalize();
       for (const [r, sign] of [[A, 1], [B, -1]]) {
         if (r === player) r.pos.addScaledVector(d, sign * push * 0.6);
-        else r.lat += sign * d.dot(TR[Math.floor(wrap((r.s / TL) * N))]) * push * 0.4;
+        else if (r !== friend && drivesRivals()) r.lat += sign * d.dot(TR[Math.floor(wrap((r.s / TL) * N))]) * push * 0.4;
       }
       if (player.brave > 0 && (A === player || B === player)) spinOut(A === player ? B : A);
     }
@@ -1168,25 +1274,26 @@ function eat(food) {
 // --- the five powers -------------------------------------------------------
 const POWERS = {
   'Gaming Knockout'() {
-    ringT = 0; ring.visible = true;
+    burstRing(player);
+    send({ t: 'fx', k: 'ring' });
     let hit = 0;
-    for (const r of rivals) if (r.pos.distanceTo(player.pos) < 11 && spinOut(r)) hit++;
+    for (const r of others()) if (r.pos.distanceTo(player.pos) < 11 && spinOut(r)) hit++;
     if (!hit) showPop('Whoosh!');
   },
   'Speed Eating'() { player.rush = 3; showPop('Sugar rush!'); },
   'Sports Ball'() {
     const f = player.idx + 3;
-    let rel = player.heading - headingAt(f);
-    rel = Math.atan2(Math.sin(rel), Math.cos(rel));
-    Object.assign(ballState, { life: 5, f, lat: latOf(player.pos, player.idx), latVel: -Math.sin(rel) * 30 });
-    ball.visible = true;
+    const rel = angleTo(headingAt(f), player.heading);
+    const b = { id: newId(), f, lat: latOf(player.pos, player.idx), latVel: -Math.sin(rel) * 30 };
+    addBall(player, b.id, b.f, b.lat, b.latVel);
+    send({ t: 'fx', k: 'ball', ...b });
     showPop('Kick!');
   },
   'Instant Cake'() {
-    const m = mesh(cakeGeo);
-    m.position.copy(player.pos).addScaledVector(fwdOf(player), -2.6).setY(0);
-    scene.add(m);
-    cakes.push({ m, life: 20 });
+    const at = player.pos.clone().addScaledVector(fwdOf(player), -2.6);
+    const id = newId();
+    addCake(player, id, at.x, at.z);
+    send({ t: 'fx', k: 'cake', id, x: at.x, z: at.z });
     showPop('Cake!');
   },
   'Brave Mode'() { player.brave = 4; showPop('Brave!'); },
@@ -1198,14 +1305,13 @@ function usePower() {
   POWERS[player.power]();
 }
 
-let ringT = -1;
 function updateEffects(dt, t) {
-  if (ringT >= 0) {
-    ringT += dt;
-    const k = ringT / 0.45;
-    ring.position.copy(player.pos).setY(0.6);
-    ring.scale.setScalar(1 + k * 10);
-    if (k >= 1) { ringT = -1; ring.visible = false; }
+  for (let k = rings.length - 1; k >= 0; k--) {
+    const g = rings[k];
+    g.t += dt;
+    g.m.position.copy(g.owner.pos).setY(0.6);
+    g.m.scale.setScalar(1 + (g.t / 0.45) * 10);
+    if (g.t >= 0.45) removeFx(rings, k);
   }
   for (const pool of Object.values(puffPools)) {
     for (const p of pool.list) {
@@ -1216,33 +1322,194 @@ function updateEffects(dt, t) {
       if (p.life <= 0) p.m.visible = false;
     }
   }
-  if (ballState.life > 0) {
-    ballState.life -= dt;
-    ballState.f += (42 * dt / TL) * N;
-    ballState.lat += ballState.latVel * dt;
-    if (Math.abs(ballState.lat) > WALL - 1) {         // bounce off the hedges
-      ballState.lat = Math.sign(ballState.lat) * (WALL - 1);
-      ballState.latVel *= -1;
-      puff(ball.position.clone());
+  for (const r of [player, friend]) {                 // sugar rush and brave sparkles
+    if (!r) continue;
+    const behind = r.pos.clone().setY(0.4).addScaledVector(fwdOf(r), -1.2);
+    if (r.rush > 0 && Math.random() < dt * 20) puff(behind, r.color, 0.4);
+    if (r.brave > 0 && Math.random() < dt * 24) puff(behind.setY(0.4 + Math.random()), r.color, 0.5);
+  }
+  for (let k = balls.length - 1; k >= 0; k--) {
+    const b = balls[k];
+    b.life -= dt;
+    b.f += (42 * dt / TL) * N;
+    b.lat += b.latVel * dt;
+    if (Math.abs(b.lat) > WALL - 1) {                 // bounce off the hedges
+      b.lat = Math.sign(b.lat) * (WALL - 1);
+      b.latVel *= -1;
+      puff(b.m.position.clone());
     }
-    ballState.latVel *= Math.pow(0.6, dt);
-    trackPoint(ballState.f, ballState.lat, ball.position).setY(0.6);
-    ball.rotation.x += dt * 20;
-    for (const r of rivals) {
-      if (r.pos.distanceTo(ball.position.clone().setY(0)) < 1.8 && spinOut(r)) { ballState.life = 0; break; }
+    b.latVel *= Math.pow(0.6, dt);
+    trackPoint(b.f, b.lat, b.m.position).setY(0.6);
+    b.m.rotation.x += dt * 20;
+    let hit = false;
+    if (b.owner === player) {
+      for (const r of others()) {
+        if (r.pos.distanceTo(b.m.position.clone().setY(0)) < 1.8 && spinOut(r)) { hit = true; break; }
+      }
     }
-    if (ballState.life <= 0) { ball.visible = false; puff(ball.position.clone(), player.color); }
+    if (hit || b.life <= 0) {
+      if (hit) send({ t: 'gone', id: b.id });
+      puff(b.m.position.clone(), b.owner.color);
+      removeFx(balls, k);
+    }
   }
   for (let k = cakes.length - 1; k >= 0; k--) {
     const c = cakes[k];
     c.life -= dt;
     c.m.rotation.y = t * 0.8;
     let eaten = false;
-    for (const r of rivals) {
-      if (r.pos.distanceTo(c.m.position) < 1.8 && spinOut(r, 'Yum!')) { eaten = true; break; }
+    if (c.owner === player) {
+      for (const r of others()) {
+        if (r.pos.distanceTo(c.m.position) < 1.8 && spinOut(r, 'Yum!')) { eaten = true; break; }
+      }
     }
-    if (eaten || c.life <= 0) { scene.remove(c.m); cakes.splice(k, 1); }
+    if (eaten) send({ t: 'gone', id: c.id });
+    if (eaten || c.life <= 0) removeFx(cakes, k);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Racing a friend: two iPads meet through PeerJS's free public server using a
+// four-letter room code, then talk directly to each other.
+// ---------------------------------------------------------------------------
+const ROOM_PREFIX = 'pet-racers-room-';
+const CODE_LETTERS = 'ABCDEFGHJKMNPQRSTUVWXYZ';    // no I, L or O
+const net = { peer: null, conn: null, host: false, code: '', heard: 0, sent: 0 };
+
+function send(msg) {
+  if (net.conn && net.conn.open) net.conn.send(msg);
+}
+
+function makeRoom() {
+  leaveRoom();
+  net.host = true;
+  net.code = [...Array(4)].map(() => CODE_LETTERS[Math.floor(Math.random() * CODE_LETTERS.length)]).join('');
+  showNet('waiting');
+  net.peer = new Peer(ROOM_PREFIX + net.code);
+  net.peer.on('connection', (c) => (net.conn ? c.close() : attach(c)));
+  net.peer.on('error', (e) => (e.type === 'unavailable-id' ? makeRoom() : netError(e)));
+}
+
+function joinRoom(code) {
+  leaveRoom();
+  net.host = false;
+  net.code = code;
+  showNet('joining');
+  net.peer = new Peer();
+  net.peer.on('open', () => attach(net.peer.connect(ROOM_PREFIX + code, { reliable: true })));
+  net.peer.on('error', netError);
+}
+
+function attach(c) {
+  net.conn = c;
+  c.on('open', () => {
+    net.heard = performance.now();
+    send({ t: 'hello', pet: player.name });
+  });
+  c.on('data', onMessage);
+  c.on('close', friendLeft);
+  c.on('error', friendLeft);
+}
+
+function netError(e) {
+  const msg = e.type === 'peer-unavailable' ? `There's no room called ${net.code}. Check the code and try again.`
+    : e.type === 'network' || e.type === 'server-error' || e.type === 'socket-error'
+      ? "Couldn't reach the room server. Check the Wi-Fi and try again."
+      : "Something went wrong connecting. Try again.";
+  leaveRoom();
+  showNet('error', msg);
+}
+
+function leaveRoom() {
+  if (net.conn) { send({ t: 'bye' }); net.conn.close(); }
+  if (net.peer) net.peer.destroy();
+  Object.assign(net, { peer: null, conn: null, host: false });
+  friend = null;
+  updatePickUi();
+}
+
+// The friend left or the connection dropped: their kart becomes a rival and
+// this iPad carries on driving everyone.
+function friendLeft() {
+  if (!net.conn) return;
+  const was = friend;
+  net.conn = null;
+  if (net.peer) net.peer.destroy();
+  Object.assign(net, { peer: null, host: false });
+  friend = null;
+  rivals = RACERS.filter((r) => !isHuman(r));
+  if (was) {
+    was.s = (((was.lap - 1) * N + was.idx) / N) * TL;
+    was.lat = THREE.MathUtils.clamp(latOf(was.pos, was.idx), -HALF + 1, HALF - 1);
+    was.skill = 0.9;
+  }
+  if (state !== 'title') showPop('Your friend left');
+  updatePickUi();
+  if (state === 'done') finish();
+}
+
+function onMessage(m) {
+  net.heard = performance.now();
+  switch (m.t) {
+    case 'hello':
+    case 'pick': {
+      friend = RACERS.find((r) => r.name === m.pet) || null;
+      if (friend === player) {
+        // Both picked the same pet: whoever joined switches to a free one.
+        if (!net.host) pick(RACERS.find((r) => r !== friend));
+      }
+      if (m.t === 'hello') showNet(null);
+      if (state === 'title') resetRace();
+      updatePickUi();
+      break;
+    }
+    case 'start': startRace(); break;
+    case 'lobby': backToPick(); break;
+    case 's': {
+      if (friend) {
+        const [x, z, h, v, steer, lap, idx, spin, brave, rush] = m.p;
+        friend.remote = { x, z, h, v, at: performance.now() };
+        Object.assign(friend, { steer, lap, idx, brave, rush, spin: Math.max(friend.spin, spin) });
+      }
+      if (m.rv && !net.host) {
+        for (const [name, s, lat, speed, spin] of m.rv) {
+          const r = RACERS.find((o) => o.name === name);
+          if (!r || isHuman(r)) continue;
+          Object.assign(r, { netS: s, netLat: lat, speed, spin: Math.max(r.spin, spin) });
+        }
+      }
+      break;
+    }
+    case 'spin': {
+      if (m.who === player.name) getHit(m.text);
+      else if (drivesRivals()) {
+        const r = RACERS.find((o) => o.name === m.who);
+        if (r && !isHuman(r) && r.spin <= 0) r.spin = 1.5;
+      }
+      break;
+    }
+    case 'fx':
+      if (!friend) break;
+      if (m.k === 'ring') burstRing(friend);
+      if (m.k === 'ball') addBall(friend, m.id, m.f, m.lat, m.latVel);
+      if (m.k === 'cake') addCake(friend, m.id, m.x, m.z);
+      break;
+    case 'gone': removeFxById(m.id); break;
+    case 'bye': friendLeft(); break;
+  }
+}
+
+// About 15 times a second: where our kart is (and, from the room's maker,
+// where the rivals are).
+function netTick(now) {
+  if (!net.conn || !net.conn.open) return;
+  if (now - net.heard > 6000) { friendLeft(); return; }
+  if (now - net.sent < 66) return;
+  net.sent = now;
+  const p = player;
+  const msg = { t: 's', p: [p.pos.x, p.pos.z, p.heading, p.speed, p.steer, p.lap, p.idx, p.spin, p.brave, p.rush] };
+  if (net.host) msg.rv = rivals.map((r) => [r.name, r.s, r.lat, r.speed, r.spin]);
+  send(msg);
 }
 
 // ---------------------------------------------------------------------------
@@ -1293,18 +1560,18 @@ function setState(s) {
   if (!racing) $('big').textContent = '';
 }
 
-// Pick screen: one card per pet.
+// Pick screen: one card per pet. The friend's pet is taken.
 const PICK_KEY = 'pet-racers-pet';
 function pick(r) {
+  if (r === friend) return;
   player = r;
   try { localStorage.setItem(PICK_KEY, r.name); } catch (e) { /* private mode */ }
-  for (const el of $('cards').children) el.classList.toggle('on', el.dataset.name === r.name);
   $('pickName').textContent = r.name;
   $('pickKart').textContent = `${r.kart} · ${r.power}`;
   $('power').innerHTML = r.power.replace(' ', '<br>') + '!';
-  ring.geometry.dispose();
-  ring.geometry = paint(ringGeo.clone(), r.color);
+  send({ t: 'pick', pet: r.name });
   resetRace();
+  updatePickUi();
 }
 for (const r of RACERS) {
   const b = document.createElement('button');
@@ -1314,12 +1581,72 @@ for (const r of RACERS) {
   const img = document.createElement('img');
   img.src = `cards/${r.card}.jpg`;
   img.alt = `${r.name}'s card`;
-  b.append(img);
+  const tag = document.createElement('span');
+  tag.textContent = 'Friend';
+  b.append(img, tag);
   b.addEventListener('click', () => pick(r));
   $('cards').append(b);
 }
 
+function updatePickUi() {
+  const together = !!net.conn && !!friend;
+  for (const el of $('cards').children) {
+    el.classList.toggle('on', el.dataset.name === player.name);
+    el.classList.toggle('taken', !!friend && el.dataset.name === friend.name);
+  }
+  $('go').textContent = together ? 'Start!' : 'Race!';
+  $('go').classList.toggle('hidden', together && !net.host);
+  $('friendBtn').textContent = together ? 'Leave' : 'Race a friend';
+  $('netStatus').classList.toggle('hidden', !together);
+  $('netStatus').textContent = net.host ? 'Racing with a friend! Tap Start when you’re both ready.'
+    : 'Racing with a friend! Your friend taps Start.';
+  $('again').classList.toggle('hidden', !!net.conn && !net.host);
+  $('other').classList.toggle('hidden', !!net.conn && !net.host);
+  $('cardWait').classList.toggle('hidden', !(net.conn && !net.host));
+}
+
+// The "Race a friend" panel.
+function showNet(view, msg = '') {
+  const el = $('net');
+  el.classList.toggle('hidden', !view);
+  if (!view) return;
+  const views = {
+    menu: `<h2>Race a friend</h2><p>Both iPads need Wi-Fi.</p>
+      <button data-act="make" class="drawn">Make a room</button>
+      <button data-act="join" class="drawn">Join a room</button>
+      <button data-act="close" class="drawn plain">Back</button>`,
+    waiting: `<h2>Your room code</h2><div class="code">${net.code}</div>
+      <p>Type it on the other iPad.</p><button data-act="cancel" class="drawn plain">Cancel</button>`,
+    join: `<h2>Join a room</h2>
+      <input id="codeIn" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD">
+      <div><button data-act="go" class="drawn">Join</button><button data-act="close" class="drawn plain">Back</button></div>`,
+    joining: `<h2>Joining ${net.code}…</h2><button data-act="cancel" class="drawn plain">Cancel</button>`,
+    error: `<h2>Oops</h2><p>${msg}</p><button data-act="close" class="drawn">OK</button>`,
+  };
+  el.innerHTML = views[view];
+  const input = $('codeIn');
+  if (input) {
+    input.addEventListener('input', () => { input.value = input.value.toUpperCase().replace(/[^A-Z]/g, ''); });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') joinFromInput(); e.stopPropagation(); });
+    input.focus();
+  }
+}
+function joinFromInput() {
+  const code = $('codeIn').value.trim().toUpperCase();
+  if (code.length === 4) joinRoom(code);
+}
+$('net').addEventListener('click', (e) => {
+  const act = e.target.dataset && e.target.dataset.act;
+  if (act === 'make') makeRoom();
+  if (act === 'join') showNet('join');
+  if (act === 'go') joinFromInput();
+  if (act === 'close') showNet(null);
+  if (act === 'cancel') { leaveRoom(); showNet(null); }
+});
+
 function startRace() {
+  if (net.conn && net.host) send({ t: 'start' });
+  showNet(null);
   resetRace();
   const fwd = fwdOf(player);
   camPos.copy(player.pos).addScaledVector(fwd, -5).setY(2.6);
@@ -1328,11 +1655,19 @@ function startRace() {
   setState('countdown');
 }
 
+function backToPick() {
+  if (net.conn && net.host) send({ t: 'lobby' });
+  resetRace();
+  setState('title');
+  updatePickUi();
+}
+
 const ORDINAL = ['', '1st', '2nd', '3rd', '4th', '5th'];
 function finish() {
   const place = placeOf(player);
   $('result').textContent = place === 1 ? 'You won!' : `${ORDINAL[place]} place!`;
   $('sub').textContent = `${player.name} · ${raceTime.toFixed(1)} seconds`;
+  updatePickUi();
   setState('done');
 }
 
@@ -1343,8 +1678,9 @@ function updateHud() {
 }
 
 $('go').addEventListener('click', startRace);
+$('friendBtn').addEventListener('click', () => (net.conn ? leaveRoom() : showNet('menu')));
 $('again').addEventListener('click', startRace);
-$('other').addEventListener('click', () => { resetRace(); setState('title'); });
+$('other').addEventListener('click', backToPick);
 
 function hold(el, key) {
   const on = (e) => { e.preventDefault(); input[key] = true; el.classList.add('down'); };
@@ -1360,20 +1696,24 @@ const KEYS = { ArrowLeft: 'left', a: 'left', ArrowRight: 'right', d: 'right' };
 window.addEventListener('keydown', (e) => {
   if (KEYS[e.key]) input[KEYS[e.key]] = true;
   if (e.key === ' ' || e.key === 'Enter') {
+    const canStart = !net.conn || net.host;
     if (state === 'race') usePower();
-    else if (state === 'title' || state === 'done') startRace();
+    else if ((state === 'title' || state === 'done') && canStart && $('net').classList.contains('hidden')) startRace();
     e.preventDefault();
   }
 });
 window.addEventListener('keyup', (e) => { if (KEYS[e.key]) input[KEYS[e.key]] = false; });
 
-// Hold auto-update reloads until nobody is mid-race.
-window.autoUpdateIsIdle = () => state === 'title' || state === 'done';
+// Say goodbye when the page closes, so the friend doesn't wait for a timeout.
+window.addEventListener('pagehide', () => send({ t: 'bye' }));
+
+// Hold auto-update reloads until nobody is mid-race or in a room.
+window.autoUpdateIsIdle = () => (state === 'title' || state === 'done') && !net.peer;
 
 // For testing from the console.
 window.petRacers = {
-  RACERS, input, startRace, usePower, pick, placeOf, progressOf, cakes, ballState,
-  get player() { return player; }, get rivals() { return rivals; }, get state() { return state; },
+  RACERS, input, startRace, usePower, pick, placeOf, progressOf, cakes, balls, net, makeRoom, joinRoom, leaveRoom,
+  get player() { return player; }, get friend() { return friend; }, get rivals() { return rivals; }, get state() { return state; },
 };
 
 let saved = null;
@@ -1401,6 +1741,7 @@ function frame(now) {
     updatePlayer(dt, driving);
     updateRivals(dt, driving);
   }
+  updateFriend(dt);
   if (state === 'race') {
     raceTime += dt;
     if (player.lap > LAPS) finish();
@@ -1409,6 +1750,7 @@ function frame(now) {
   updateSnacks(dt, t);
   updateEffects(dt, t);
   updateCamera(dt, t);
+  netTick(now);
   if (state !== 'title') updateHud();
   if (popTimer > 0) { popTimer -= dt; if (popTimer <= 0) $('pop').style.opacity = 0; }
 
