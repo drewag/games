@@ -1,6 +1,6 @@
 # How it plays
 
-Pet Racers is a kart racer: three laps of a track against seven rivals, or against
+Pet Racers is a kart racer: three laps of a track against eight rivals, or against
 friends on other iPads with rivals filling the remaining spots. The hard parts
 of the genre are taken away for a 9-year-old. The kart accelerates by itself, you can't
 fall off or get stuck, and nobody is far behind for long. **Pro driving** puts some back
@@ -8,7 +8,7 @@ for whoever wants them: gas, hopping and drifting, as in Mario Kart.
 
 ## Picking a pet
 
-The title screen shows the eight card scans in a row. Tapping a card picks that pet: it
+The title screen shows the nine card scans in a row. Tapping a card picks that pet: it
 appears in its kart, slowly turning, with the kart's name and the power's name under it.
 Below the cards, **Park**, **Backyard** and **Kitchen** pick the track, and **Easy driving**
 or **Pro: hop & drift** picks the controls. **Race!** starts. The game remembers the last
@@ -57,7 +57,7 @@ After the finish line the kart drives itself, as in Easy.
 
 Karts start on a staggered grid behind the start line, with your racer at the back. A
 3-2-1-GO countdown starts the race. The top of the screen shows the lap (1/3) and your
-place (1st–8th). After the third lap, a card shows your place and time and offers
+place (1st–9th). After the third lap, a card shows your place and time and offers
 **Race again!** or a different pet.
 
 - **Off the road** (grass, or the kitchen counter) beyond the curbs slows the kart to
@@ -70,7 +70,7 @@ place (1st–8th). After the third lap, a card shows your place and time and off
 
 ## Snacks and the meter
 
-Snacks float over the track in rows across it: tacos, sushi, ramen, popcorn and burgers, mixed.
+Snacks float over the track in rows across it: tacos, sushi, ramen, popcorn, burgers and fries, mixed.
 Driving through one eats it, and it comes back a few seconds later. The **meter** in the
 top corner has 3 segments. A snack fills one; your pet's favorite food fills two. A full
 meter lights up the Power button, and using the power empties it.

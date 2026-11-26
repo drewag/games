@@ -17,7 +17,7 @@ first column is the one you want.
 | Sparks | The blue, orange and purple glow a drift builds | play.md | charge, mini-turbo level |
 | Boost | The burst of speed from letting go of a drift, or a rocket start | play.md | mini-turbo, turbo, speed-up |
 | Catch-up | Rivals easing off or speeding up to keep it close | play.md | rubber band, rubberbanding |
-| Pick screen | The title screen with the eight cards | play.md | character select, menu |
+| Pick screen | The title screen with the nine cards | play.md | character select, menu |
 | Friend | Another person's racer, on another iPad | play.md | remote player, peer, player 2, guest |
 | Room | iPads joined to race each other (up to five) | play.md | lobby, session, match, game |
 | Room code | The four letters that join a room | play.md | PIN, game code, invite |

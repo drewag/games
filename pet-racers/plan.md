@@ -17,6 +17,7 @@ match it.
 - [x] Racing friends: up to five iPads in a room through the host, powers hit friends
 - [x] Zeus, Plufulous and Scarlet Ivy: models, karts (Sushi Burger, Burger Kart, Maki Roll),
   powers (Math Defeater, Instant Hacking, Fashion Shoot), burger snacks, eight on the grid
+- [x] Halsy: model, Fry Box kart, Mind Access power, fries snacks, nine on the grid
 - [x] Backyard and Kitchen tracks, picked on the pick screen (by the host in a room)
 - [x] Pro driving: Go/Back/Hop, drifting with blue, orange and purple boosts, rocket start
 

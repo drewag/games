@@ -1,6 +1,6 @@
 # The racers
 
-The eight pets come from the hand-drawn character cards. Every pet appears in every race: the one
+The nine pets come from the hand-drawn character cards. Every pet appears in every race: the one
 you pick is your **racer**, and the others are **rivals** driven by the computer. When
 racing friends, each **friend**'s racer takes a rival's place.
 
@@ -18,9 +18,11 @@ yellow pet Mango); this game goes by the cards.
 | Zeus | Sushi Burger | sushi and burgers | yellow | **Math Defeater** |
 | Plufulous | Burger Kart | burgers | pink | **Instant Hacking** |
 | Scarlet Ivy | Maki Roll | sushi | blue | **Fashion Shoot** |
+| Halsy | Fry Box | fries and burgers | green | **Mind Access** |
 
 A pet's color comes from "Fav color" on their card. Zeus lists two favorite foods, so both
-sushi and burgers fill two meter segments for Zeus. Their power's effects are drawn in it.
+sushi and burgers fill two meter segments for Zeus. Halsy's card says McDonald's, so fries
+and burgers both count for Halsy. Their power's effects are drawn in it.
 
 ## Powers
 
@@ -50,6 +52,9 @@ Each one gives the pet its own way to race:
   behind Scarlet Ivy within about five kart-lengths is dazzled and spins out ("Flash!").
   A friend who gets flashed sees their screen flash white. Scarlet Ivy wants to be just in
   front of a crowd.
+- **Mind Access** (Halsy): Halsy gets into the minds of the next two karts ahead (within
+  about 20 kart-lengths). A green trail of thought reaches each one, and they forget
+  they're racing and spin out ("Mind read!"). Halsy wants to be at the back of a pack.
 
 Rivals don't use powers. They can only be bumped or spun out, which keeps races friendly
 for younger players.
@@ -57,4 +62,5 @@ for younger players.
 The powers come from the "Powers" line on each card. Several cards also list love,
 kindness and friendship, which are shared by everyone and aren't powers here. Plufulous's
 card also lists math defeating, but that one's Zeus's, so Plufulous gets hacking; Scarlet
-Ivy's card lists hacking too, so Scarlet Ivy gets the glamorous fashion shoots.
+Ivy's card lists hacking too, so Scarlet Ivy gets the glamorous fashion shoots. Halsy's
+card lists love, friendship and accessing anyone's mind, so Halsy gets the mind one.

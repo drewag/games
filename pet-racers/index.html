@@ -79,7 +79,7 @@
   #cards { display: flex; justify-content: center; gap: min(12px, 1.2vw); margin-bottom: 10px; }
   .pc {
     padding: 0; border: 4px solid var(--ink); border-radius: 6px; background: #fff; cursor: pointer;
-    width: min(96px, 10.4vw); aspect-ratio: 3 / 4; overflow: hidden; opacity: 0.7;
+    width: min(88px, 9.2vw); aspect-ratio: 3 / 4; overflow: hidden; opacity: 0.7;
     transition: transform 0.15s, opacity 0.15s; box-shadow: 3px 4px 0 rgba(90, 50, 20, 0.25);
   }
   .pc:nth-child(odd) { transform: rotate(-2deg); }
@@ -675,6 +675,25 @@ const PETS = {
     inside: { g: 'w', k: 'w', n: 'w', r: 'w', p: 'w' },
     back: {},
   },
+  Halsy: {
+    rows: [
+      'BBB......BBB',
+      'BBBBBBBBBBBB',
+      'BmmmmBBmmmmB',
+      'mssssmmssssm',
+      'mssssmmssssm',
+      'BmmmmBBmmmmB',
+      'BBBBBBBBBBBB',
+      'eEeYYkYYYeEe',
+      '.eeYYYYYYEe.',
+      '..eYYYYYYe..',
+      '...YYYYYY...',
+      '...YY..YY...',
+    ],
+    pal: { B: '#5b3418', m: '#7fd69a', s: '#b4b4c0', e: '#f6a35c', E: '#ffd9b3', Y: '#f2c14e', k: '#2a2228' },
+    inside: { m: 'B', s: 'B', E: 'e', k: 'Y' },
+    back: {},
+  },
 };
 
 function buildPet(def, s = 0.09) {
@@ -864,6 +883,23 @@ function makiParts() {
   return parts;
 }
 
+// A red fry carton. As a kart the fries stand up behind the pet like a seat
+// back; as a snack they fill the top.
+function friesParts(snack = false) {
+  const parts = [];
+  parts.push(place(paint(new THREE.CylinderGeometry(1, 0.8, 0.9, 4, 1, false, Math.PI / 4), '#d8342c'),
+    { p: [0, 0.8, 0], s: [0.95, 1, 1.25] }));
+  parts.push(place(paint(box(), '#7fd69a'), { p: [0, 0.9, 0.83], s: [0.9, 0.12, 0.06] }));   // a green stripe
+  const r = rng(11), n = snack ? 16 : 12;
+  for (let k = 0; k < n; k++) {
+    const h = 0.55 + r() * 0.4;
+    const x = (r() - 0.5) * 1.0, z = snack ? (r() - 0.5) * 1.2 : -0.85 + r() * 0.45;
+    parts.push(place(paint(box(), r() < 0.8 ? '#ffcf3f' : '#f2b233'),
+      { p: [x, 1.2 + h / 2 - 0.15, z], r: [(r() - 0.5) * 0.3, r(), (r() - 0.5) * 0.3], s: [0.12, h, 0.12] }));
+  }
+  return parts;
+}
+
 function kartGeo(parts) {
   wheels(parts);
   return merge(parts);
@@ -888,6 +924,8 @@ const RACERS = [
     color: '#e0479e', parts: () => burgerParts(), petY: 1.0 },
   { name: 'Scarlet Ivy', card: 'scarlet-ivy', kart: 'Maki Roll', power: 'Fashion Shoot', food: 'sushi',
     color: '#3b7dd8', parts: makiParts, petY: 1.22 },
+  { name: 'Halsy', card: 'halsy', kart: 'Fry Box', power: 'Mind Access', food: ['fries', 'burger'],
+    color: '#14946a', parts: () => friesParts(), petY: 1.25 },
 ];
 
 function shadowMesh() {
@@ -1213,6 +1251,7 @@ const SNACK_GEO = {
   ramen: merge(shrink(ramenParts(), 0.45, [0, 0.15, 0])),
   popcorn: merge(shrink(popcornParts(), 0.42, [0, 0.1, 0])),
   burger: merge(shrink(burgerParts({ snack: true }), 0.45, [0, 0.05, 0])),
+  fries: merge(shrink(friesParts(true), 0.45, [0, 0.05, 0])),
 };
 const FOODS = Object.keys(SNACK_GEO);
 const snacks = [];
@@ -1328,6 +1367,13 @@ function flashFx(owner) {
   burstRing(owner);
   for (let k = 0; k < 10; k++) puff(owner.pos.clone().setY(1 + Math.random()), k % 2 ? owner.color : '#ffffff', 0.5);
 }
+// Mind Access: a trail of thought from Halsy to each kart, and a swirl over its head.
+function mindFx(owner, targets) {
+  for (const r of targets) {
+    for (let k = 1; k <= 8; k++) puff(owner.pos.clone().lerp(r.pos, k / 9).setY(1.6), owner.color, 0.5);
+    for (let k = 0; k < 6; k++) puff(r.pos.clone().setY(1.8 + Math.random() * 0.6), k % 2 ? owner.color : '#ff7eb6', 0.7);
+  }
+}
 function screenFlash(a) {
   const el = $('flash');
   el.style.transition = 'none';
@@ -1380,7 +1426,7 @@ function resetRace() {
   const humans = net.host ? [player, ...friends]
     : net.roster.length ? net.roster.map(([, pet]) => racerNamed(pet)) : [player];
   const order = [...rivals, ...humans];
-  const skills = [0.94, 0.93, 0.92, 0.91, 0.9, 0.89, 0.88];
+  const skills = [0.94, 0.93, 0.92, 0.91, 0.9, 0.89, 0.88, 0.87];
   order.forEach((r, k) => {
     const f = -6 - k * 5, lat = k % 2 ? 3 : -3;
     trackPoint(f, lat, r.pos);
@@ -1739,6 +1785,17 @@ const POWERS = {
     send({ t: 'fx', k: 'hack', o: player.name, x: from.x, z: from.z, x2: player.pos.x, z2: player.pos.z });
     showPop('Hacked!');
   },
+  'Mind Access'() {
+    // Into the minds of the next two karts ahead: they forget they're racing.
+    const me = progressOf(player), reach = (60 / TL) * N;
+    const targets = others().filter((r) => { const d = progressOf(r) - me; return d > 0 && d < reach; })
+      .sort((a, b) => progressOf(a) - progressOf(b)).slice(0, 2);
+    mindFx(player, targets);
+    send({ t: 'fx', k: 'mind', o: player.name, who: targets.map((r) => r.name) });
+    let hit = 0;
+    for (const r of targets) if (spinOut(r, 'Mind read!')) hit++;
+    if (!hit) showPop('Hmm…');
+  },
   'Fashion Shoot'() {
     flashFx(player);
     screenFlash(0.3);
@@ -2074,6 +2131,7 @@ function showFx(m) {
   if (m.k === 'plus') addPlus(owner, m.id, m.f, m.lat, m.target);
   if (m.k === 'hack') hackFx(owner, new V3(m.x, 0, m.z), new V3(m.x2, 0, m.z2));
   if (m.k === 'flash') flashFx(owner);
+  if (m.k === 'mind') mindFx(owner, (m.who || []).map(racerNamed).filter(Boolean));
 }
 
 const myState = () => {
@@ -2299,7 +2357,7 @@ function backToPick() {
   updatePickUi();
 }
 
-const ORDINAL = ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'];
+const ORDINAL = ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'];
 function finish() {
   const place = placeOf(player);
   $('result').textContent = place === 1 ? 'You won!' : `${ORDINAL[place]} place!`;
