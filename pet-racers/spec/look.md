@@ -33,6 +33,10 @@ Each track is a place drawn from a pet's point of view:
 
 The pets are tiny in the kitchen: the counter's things are many times their size.
 
+Where a big hill in the distance reaches over the road (on the Snow, Backyard and Park
+tracks), the road goes through it in a **tunnel**: a grey stone arch with a stone portal
+at each end, and no border inside.
+
 ## The drawn style
 
 - **Marker outlines** in the cards' brown (`#5a3214`) go around every shape and between

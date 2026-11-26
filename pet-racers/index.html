@@ -1257,6 +1257,80 @@ const TRACKS = [
   },
 ];
 
+// Drops the triangles whose centre fails `keep(x, y, z)`.
+function keepTriangles(geo, keep) {
+  const pos = geo.attributes.position, names = Object.keys(geo.attributes), out = {};
+  for (const k of names) out[k] = [];
+  for (let i = 0; i < pos.count; i += 3) {
+    const m = (k) => (pos.getComponent(i, k) + pos.getComponent(i + 1, k) + pos.getComponent(i + 2, k)) / 3;
+    if (!keep(m(0), m(1), m(2))) continue;
+    for (const k of names) {
+      const a = geo.attributes[k];
+      for (let v = i; v < i + 3; v++) for (let c = 0; c < a.itemSize; c++) out[k].push(a.getComponent(v, c));
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  for (const k of names) g.setAttribute(k, new THREE.Float32BufferAttribute(out[k], geo.attributes[k].itemSize));
+  return g;
+}
+
+// Tunnels: a stone arch over the road wherever it runs through a hill, with a
+// portal at each end that covers the hole cut in the hill.
+const TUNNEL_H = 7.5;
+function tunnels(parts, hills) {
+  if (!hills.length) return [];
+  const inHill = (p) => hills.some(({ c, rad }) =>
+    ((p.x - c.x) / rad.x) ** 2 + ((p.y - c.y) / rad.y) ** 2 + ((p.z - c.z) / rad.z) ** 2 < 1);
+  const covered = [];
+  for (let i = 0; i < N; i++) {
+    covered[i] = [[-WALL, 1], [0, 1], [WALL, 1], [0, TUNNEL_H]].some(([lat, y]) => inHill(trackPoint(i, lat).setY(y)));
+  }
+  const inTunnel = covered.map((_, i) => [...Array(11)].some((_, k) => covered[wrap(i + k - 5)]));   // a little past each end
+  const K = 12, W = WALL + 1.2;
+  const arch = (i, k, w = W, h = TUNNEL_H) => {
+    const a = (k / K) * Math.PI;
+    return trackPoint(i, w * Math.cos(a)).setY(h * Math.sin(a));
+  };
+  const P = [], C = [], col = new THREE.Color();
+  const tri = (a, b, c, color) => { col.set(color); for (const v of [a, b, c]) { P.push(v.x, v.y, v.z); C.push(col.r, col.g, col.b); } };
+  const quad = (a, b, c, d, color) => { tri(a, b, c, color); tri(a, c, d, color); };
+  for (let i = 0; i < N; i++) {
+    if (!inTunnel[i]) continue;
+    const j = i + 1;
+    for (let k = 0; k < K; k++) {
+      quad(arch(i, k), arch(j, k), arch(j, k + 1), arch(i, k + 1), Math.floor(i / 6) % 2 ? '#a39a8f' : '#b3aa9f');
+    }
+    // A portal where the tunnel starts or ends: stone from the arch out to a rectangle.
+    for (const [at, edge] of [[i, !inTunnel[wrap(i - 1)]], [j, !inTunnel[wrap(j)]]]) {
+      if (!edge) continue;
+      const Wo = W + 5, Ho = TUNNEL_H + 5;
+      // Where the ray out from the arch at step k meets the rectangle, and which side.
+      const outer = (k) => {
+        const a = (k / K) * Math.PI, cx = Math.cos(a), sy = Math.sin(a);
+        const tSide = Math.abs(cx) > 1e-6 ? Wo / (W * Math.abs(cx)) : Infinity;
+        const tTop = sy > 1e-6 ? Ho / (TUNNEL_H * sy) : Infinity;
+        const t = Math.min(tSide, tTop);
+        return { p: trackPoint(at, W * cx * t).setY(TUNNEL_H * sy * t), top: tTop <= tSide, sign: Math.sign(cx) };
+      };
+      for (let k = 0; k < K; k++) {
+        const o0 = outer(k), o1 = outer(k + 1);
+        quad(arch(at, k), o0.p, o1.p, arch(at, k + 1), '#8a8178');
+        if (o0.top !== o1.top) {                       // fill the rectangle's corner
+          const sign = o0.top ? o1.sign : o0.sign;
+          tri(o0.p, trackPoint(at, sign * Wo).setY(Ho), o1.p, '#8a8178');
+        }
+      }
+    }
+  }
+  if (!P.length) return inTunnel;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+  g.computeVertexNormals();
+  parts.push(g);
+  return inTunnel;
+}
+
 function buildTrack(def) {
   const parts = [];
   const r = rng(def.name.length * 97 + 12);
@@ -1291,11 +1365,14 @@ function buildTrack(def) {
   parts.push(road);
 
   // the border along both sides
+  const edges = [];                               // [sample, first part, end] to drop in tunnels
   for (let i = 0; i < N; i += def.borderStep) {
     for (const side of [-1, 1]) {
       const p = trackPoint(i, side * (WALL + 2.4));
       if (nearTrack(p, WALL - 0.5)) continue;     // don't poke into another part of the road
+      const from = parts.length;
       BORDERS[def.border](parts, r, p, i);
+      edges.push([i, from, parts.length]);
     }
   }
 
@@ -1321,11 +1398,21 @@ function buildTrack(def) {
     }
   }
   if (def.hills) {
+    const hills = [];
     for (let n = 0; n < 22; n++) {
       const a = (n / 22) * Math.PI * 2 + r() * 0.2, d = 230 + r() * 40, s = 40 + r() * 40;
-      parts.push(place(paint(sphere(12, 8), def.hills[n % 2]),
-        { p: [Math.cos(a) * d, -s * 0.35, Math.sin(a) * d], s: [s * 1.6, s, s * 1.6] }));
+      const c = new V3(Math.cos(a) * d, -s * 0.35, Math.sin(a) * d), rad = new V3(s * 1.6, s, s * 1.6);
+      // A hill over the road gets a hole cut through it for a tunnel.
+      const overRoad = nearTrack(c.clone().setY(0), rad.x + WALL + 2);
+      let g = place(paint(overRoad ? sphere(96, 48) : sphere(12, 8), def.hills[n % 2]), { p: c.toArray(), s: rad.toArray() });
+      if (overRoad) {
+        g = keepTriangles(g, (x, y, z) => y > TUNNEL_H + 1 || !nearTrack(new V3(x, 0, z), WALL + 2.5));
+        hills.push({ c, rad });
+      }
+      parts.push(g);
     }
+    const inTunnel = tunnels(parts, hills);
+    for (const [i, a, b] of edges) if (inTunnel[i]) for (let k = a; k < b; k++) parts[k] = null;
   }
   if (def.clouds) {
     for (let n = 0; n < 14; n++) {
@@ -1338,7 +1425,7 @@ function buildTrack(def) {
     }
   }
   if (def.extra) def.extra(parts);
-  return mesh(merge(parts));
+  return mesh(merge(parts.filter(Boolean)));
 }
 
 // ---------------------------------------------------------------------------
