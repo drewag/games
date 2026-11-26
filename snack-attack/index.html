@@ -194,22 +194,25 @@ probe.style.cssText = 'position:fixed;top:0;left:0;padding-top:env(safe-area-ins
   'padding-bottom:env(safe-area-inset-bottom);visibility:hidden;pointer-events:none';
 document.body.appendChild(probe);
 
-function makeSprite(rows, px) {
+function makeSprite(rows, px, outline = true) {
   const p = Math.max(1, Math.round(px * DPR));
-  const ow = Math.max(1, Math.round(p * 0.22));
+  const ow = outline ? Math.max(1, Math.round(p * 0.22)) : 0;
   const h = rows.length, w = Math.max(...rows.map(r => r.length));
   const c = document.createElement('canvas');
   c.width = w * p + ow * 2;
   c.height = h * p + ow * 2;
   const x = c.getContext('2d');
   const filled = (ch) => ch && ch !== '.' && ch !== ' ';
-  x.fillStyle = OUTLINE;
-  rows.forEach((r, j) => [...r].forEach((ch, i) => {
-    if (filled(ch)) x.fillRect(i * p, j * p, p + ow * 2, p + ow * 2);
-  }));
+  if (outline) {
+    x.fillStyle = OUTLINE;
+    rows.forEach((r, j) => [...r].forEach((ch, i) => {
+      if (filled(ch)) x.fillRect(i * p, j * p, p + ow * 2, p + ow * 2);
+    }));
+  }
   rows.forEach((r, j) => [...r].forEach((ch, i) => {
     if (filled(ch)) { x.fillStyle = PAL[ch]; x.fillRect(ow + i * p, ow + j * p, p, p); }
   }));
+  c.ow = ow;
   return c;
 }
 
@@ -220,6 +223,38 @@ function sprite(key, rows, px) {
   return s;
 }
 const petSprite = (i, px) => sprite('pet' + i, PETS[i].rows, px);
+
+// Walking frames: eyes and nose slide toward the walking direction (so the pet
+// looks where it's going) and the feet swing back and forth.
+function walkRows(rows, dir, frame) {
+  const a = rows.map(r => [...r]);
+  const last = a.length - 1;
+  if (dir) {
+    for (let j = 0; j < last; j++) {
+      const r = a[j];
+      const idx = [...r.keys()].filter(x => 'gnk'.includes(r[x]));
+      idx.sort((p, q) => dir > 0 ? q - p : p - q);
+      for (const x of idx) {
+        const nx = x + dir;
+        const inside = r[nx] && r[nx] !== '.' && r[nx + dir] === r[nx];
+        if (inside && !'gnk'.includes(r[nx])) { const t = r[nx]; r[nx] = r[x]; r[x] = t; }
+      }
+    }
+  }
+  if (frame) {
+    const shift = (frame === 1 ? 1 : -1) * (dir || 1);
+    const feet = a[last], out = feet.map(() => '.');
+    feet.forEach((c, x) => {
+      if (c === '.') return;
+      const nx = x + shift;
+      out[nx >= 0 && nx < feet.length ? nx : x] = c;
+    });
+    a[last] = out;
+  }
+  return a.map(r => r.join(''));
+}
+const petWalkSprite = (i, px, dir, frame) =>
+  (dir || frame) ? sprite(`pet${i}d${dir}f${frame}`, walkRows(PETS[i].rows, dir, frame), px) : petSprite(i, px);
 const snackSprite = (kind, px) => sprite(kind, SNACKS[kind], px);
 const sw = (s) => s.width / DPR;
 const sh = (s) => s.height / DPR;
@@ -250,7 +285,7 @@ function resize() {
   L.petPx = Math.max(4, Math.round(Math.min(W * 0.2, H * 0.15) / 12));
   L.itemPx = Math.max(4, Math.round(L.petPx * 0.95));
   L.hudPx = Math.max(3, Math.round(L.petPx * 0.6));
-  L.groundY = H - safeBottom - Math.max(28, H * 0.07);
+  L.groundY = Math.round((H - safeBottom - Math.max(28, H * 0.07)) / L.petPx) * L.petPx;
   G.petX = G.targetX = clampPetX(G.petX || W / 2);
 }
 
@@ -281,6 +316,9 @@ const SFX = {
   fav: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.06, 0.1)),
   bad: () => tone(220, 0, 0.3, 'sawtooth', 0.06, 80),
   heart: () => { tone(784, 0, 0.1, 'triangle', 0.1); tone(1175, 0.08, 0.18, 'triangle', 0.1); },
+  boing: () => tone(260, 0, 0.18, 'sine', 0.09, 620),
+  thud: () => tone(140, 0, 0.08, 'triangle', 0.05, 90),
+  bonk: () => { tone(330, 0, 0.1, 'square', 0.06, 160); tone(160, 0.08, 0.2, 'sawtooth', 0.05, 70); },
   over: () => [523, 440, 349, 262].forEach((f, i) => tone(f, i * 0.15, 0.2, 'triangle', 0.1)),
 };
 function buzz(ms) { if (navigator.vibrate) navigator.vibrate(ms); }
@@ -294,6 +332,7 @@ const G = {
   items: [], parts: [], pops: [],
   petX: 0, targetX: 0, squash: 0, hurt: 0,
   best: +(localStorage.getItem('snackattack-best') || 0), newBest: false, overT: 0,
+  scene: Math.max(0, +(localStorage.getItem('snackattack-scene') || 0)), clouds: [],
   buttons: [],
 };
 
@@ -314,8 +353,10 @@ function startGame(petIndex) {
   G.state = 'play';
   G.score = 0; G.hearts = 3; G.time = 0; G.spawnT = 0.6;
   G.items = []; G.parts = []; G.pops = [];
+  G.visitors = []; G.visitorT = 8; G.invuln = 0; G.facing = 0; G.stillT = 0;
   G.squash = 0; G.hurt = 0; G.newBest = false;
   G.petX = G.targetX = W / 2;
+  makeClouds();
 }
 
 function level() { return Math.floor(G.score / 10); }
@@ -380,6 +421,7 @@ function gameOver() {
   G.overT = 0;
   for (const it of G.items) burst(it.x, it.y, ['#ffffff', '#cccccc'], 4);
   G.items = [];
+  G.visitors = [];
   if (G.score > G.best) {
     G.best = G.score;
     G.newBest = true;
@@ -391,6 +433,68 @@ function gameOver() {
 // ---------------------------------------------------------------------------
 // Update
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Visitors: the other pets bounce across the screen. Don't get bonked!
+// A shadow on the ground shows where they'll land next.
+// ---------------------------------------------------------------------------
+function spawnVisitor() {
+  const others = PETS.map((_, i) => i).filter(i => i !== G.pet);
+  const i = pick(others);
+  const dir = Math.random() < 0.5 ? 1 : -1;
+  const ps = petSize();
+  const hop = Math.max(ps.w * 3, W / 3.2);
+  const height = Math.min(L.groundY * 0.5, Math.max(ps.h * 2.2, H * 0.2));
+  const x0 = dir > 0 ? -ps.w : W + ps.w;
+  G.visitors.push({ i, dir, x0, x: x0, hop, height, hops: 0, sq: 0,
+    speed: (hop / 0.85) * (1 + Math.min(0.6, level() * 0.04)) });
+  G.visitorT = rand(9, 15) * Math.max(0.5, 1 - level() * 0.05);
+  SFX.boing();
+}
+
+function visitorPos(v) {
+  const dist = Math.abs(v.x - v.x0);
+  const p = (dist / v.hop) % 1;
+  return { p, lift: 4 * v.height * p * (1 - p), hops: Math.floor(dist / v.hop) };
+}
+
+function bonk(v) {
+  G.hearts--;
+  G.hurt = 0.6;
+  G.invuln = 1.4;
+  pop('Bonk!', G.petX, L.groundY - petSize().h * 1.2, '#ff7b00');
+  burst(G.petX, L.groundY - petSize().h * 0.6, ['#ffcf3f', '#ffffff', '#ff7eb6'], 14);
+  SFX.bonk();
+  buzz(150);
+  if (G.hearts <= 0) gameOver();
+}
+
+function updateVisitors(dt) {
+  if (G.score >= 3 || G.time > 15) {
+    G.visitorT -= dt;
+    if (G.visitorT <= 0) spawnVisitor();
+  }
+  const ps = petSize();
+  for (let k = G.visitors.length - 1; k >= 0; k--) {
+    const v = G.visitors[k];
+    v.x += v.dir * v.speed * dt;
+    v.sq = Math.max(0, v.sq - dt * 5);
+    const { lift, hops } = visitorPos(v);
+    if (hops > v.hops) {
+      v.hops = hops;
+      v.sq = 1;
+      if (v.x > 0 && v.x < W) {
+        SFX.thud();
+        burst(v.x, L.groundY, ['#d8d8d8', '#bfbfbf'], 5);
+      }
+    }
+    if (G.invuln <= 0 && lift < ps.h * 0.6 && Math.abs(v.x - G.petX) < ps.w * 0.65) {
+      bonk(v);
+      if (G.state !== 'play') return;
+    }
+    if ((v.dir > 0 && v.x > W + ps.w * 2) || (v.dir < 0 && v.x < -ps.w * 2)) G.visitors.splice(k, 1);
+  }
+}
+
 function update(dt) {
   G.time += dt;
 
@@ -399,6 +503,11 @@ function update(dt) {
     G.targetX = clampPetX(G.targetX);
     G.petX += (G.targetX - G.petX) * Math.min(1, dt * 20);
     G.moving = Math.abs(G.petX - prev) > 0.5;
+    if (G.moving) { G.facing = Math.sign(G.petX - prev); G.stillT = 0; }
+    else if ((G.stillT += dt) > 0.25) G.facing = 0;
+    G.invuln = Math.max(0, G.invuln - dt);
+    updateVisitors(dt);
+    if (G.state !== 'play') return;
 
     G.spawnT -= dt;
     if (G.spawnT <= 0) spawn();
@@ -442,6 +551,181 @@ function update(dt) {
     p.y -= 60 * dt;
     if (p.life <= 0) G.pops.splice(i, 1);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Backgrounds. Built from the same chunky blocks + marker outline as the pets.
+// ---------------------------------------------------------------------------
+Object.assign(PAL, {
+  '1': '#86cefc', '2': '#9bd7ff', '3': '#b1e0ff', '4': '#c6e9ff', 'Z': '#d9f1ff', 'X': '#eaf8ff',
+  '5': '#a5dc86', '6': '#6cc04a', '7': '#4f9a36', 'e': '#ffd84a',
+  'i': '#ffe7c2', 'j': '#ffd9a8', 'm': '#f6f0e6', 'q': '#e98a8a', 'x': '#c98b52',
+  '9': '#171a45', 'A': '#20255f', 'C': '#2b3279', 'D': '#fff4c2', 'E': '#fff6a8', 'L': '#8f8fc8',
+  'F': '#3b2d6b', 'H': '#2c5c3b', 'I': '#3f7d4f',
+  'J': '#3ba7d9', 'K': '#8fdcf5', 'M': '#f3d79a', 'N': '#ddb56a',
+});
+
+const SUN = ['..eee..', '.eeeee.', 'eeeeeee', 'eeeeeee', 'eeeeeee', '.eeeee.', '..eee..'];
+const MOON = ['..DDDD.', '.DDD...', 'DDD....', 'DDD....', 'DDD....', '.DDD...', '..DDDD.'];
+const CLOUD = ['...ww....', '.wwwwww..', 'wwwwwwwww', '.wwwwwww.'];
+
+class Grid {
+  constructor(cols, rows) {
+    this.cols = cols; this.rows = rows;
+    this.a = Array.from({ length: rows }, () => Array(cols).fill('.'));
+  }
+  set(i, j, c) { if (i >= 0 && j >= 0 && i < this.cols && j < this.rows) this.a[j][i] = c; }
+  rect(i, j, w, h, c) { for (let y = j; y < j + h; y++) for (let x = i; x < i + w; x++) this.set(x, y, c); }
+  stamp(rows, i, j) { rows.forEach((r, y) => [...r].forEach((c, x) => { if (c !== '.') this.set(i + x, j + y, c); })); }
+  toRows() { return this.a.map(r => r.join('')); }
+}
+
+function seeded(seed) {
+  let s = seed >>> 0 || 1;
+  return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
+}
+
+function skyBands(g, gr, bands) {
+  for (let j = 0; j < gr; j++) g.rect(0, j, g.cols, 1, bands[Math.min(bands.length - 1, Math.floor(j / gr * bands.length))]);
+}
+function hills(g, gr, c, base, amp, seed) {
+  for (let i = 0; i < g.cols; i++) {
+    const h = Math.max(1, Math.round(base + amp * Math.sin(i * 0.3 + seed) + amp * 0.5 * Math.sin(i * 0.83 + seed * 2)));
+    g.rect(i, gr - h, 1, h, c);
+  }
+}
+
+// Each scene returns layers of grids; outlined layers get the marker edge.
+const SCENES = [
+  { name: 'Paper', paper: true },
+  { name: 'Meadow', clouds: true, build(cols, rows, gr, rnd, top) {
+    const sky = new Grid(cols, rows); skyBands(sky, gr, ['1', '2', '3', '4', 'Z', 'X']);
+    const sun = new Grid(cols, rows); sun.stamp(SUN, cols - 9, top);
+    const hill = new Grid(cols, rows); hills(hill, gr, '5', 4, 1.6, 1);
+    const ground = new Grid(cols, rows);
+    ground.rect(0, gr, cols, rows - gr, '6');
+    for (let i = 0; i < cols; i += 2 + Math.floor(rnd() * 4)) { ground.set(i, gr - 1, '6'); }
+    for (let n = 0; n < cols * (rows - gr) / 6; n++) {
+      ground.set(Math.floor(rnd() * cols), gr + 1 + Math.floor(rnd() * (rows - gr)), rnd() < 0.7 ? '7' : ['p', 'Y', 'w'][Math.floor(rnd() * 3)]);
+    }
+    return [[sky, false], [sun, true], [hill, true], [ground, true]];
+  }},
+  { name: 'Kitchen', build(cols, rows, gr, rnd, top) {
+    const wall = new Grid(cols, rows);
+    for (let i = 0; i < cols; i++) wall.rect(i, 0, 1, gr, i % 4 === 0 ? 'j' : 'i');
+    const win = new Grid(cols, rows);
+    const ww = Math.max(7, Math.min(13, Math.floor(cols * 0.4))) | 1, wh = Math.max(6, Math.min(9, Math.floor(gr * 0.3)));
+    const wx = Math.floor((cols - ww) / 2), wy = Math.max(4, Math.floor(gr * 0.3) - Math.floor(wh / 2));
+    win.rect(wx, wy, ww, wh, 'w');
+    win.rect(wx + 1, wy + 1, ww - 2, wh - 2, '3');
+    win.rect(wx + Math.floor(ww / 2), wy, 1, wh, 'w');
+    win.rect(wx, wy + Math.floor(wh / 2), ww, 1, 'w');
+    win.rect(wx - 2, wy - 1, 2, wh + 2, 'P');
+    win.rect(wx + ww, wy - 1, 2, wh + 2, 'P');
+    win.rect(wx - 3, wy - 2, ww + 6, 1, 'x');
+    const floor = new Grid(cols, rows);
+    floor.rect(0, gr, cols, 1, 'x');
+    for (let j = gr + 1; j < rows; j++) for (let i = 0; i < cols; i++) {
+      floor.set(i, j, (Math.floor(i / 2) + Math.floor((j - gr - 1) / 2)) % 2 ? 'q' : 'm');
+    }
+    return [[wall, false], [win, true], [floor, true]];
+  }},
+  { name: 'Night', dark: true, build(cols, rows, gr, rnd, top) {
+    const sky = new Grid(cols, rows); skyBands(sky, gr, ['9', 'A', 'C']);
+    const stars = new Grid(cols, rows);
+    for (let n = 0; n < cols * gr / 110; n++) {
+      const i = Math.floor(rnd() * cols), j = Math.floor(rnd() * (gr - 8));
+      if (i > cols - 13 && j < top + 10) continue; // keep clear of the moon
+      stars.set(i, j, rnd() < 0.5 ? 'E' : 'L');
+      if (rnd() < 0.15) { stars.set(i - 1, j, 'E'); stars.set(i + 1, j, 'E'); stars.set(i, j - 1, 'E'); stars.set(i, j + 1, 'E'); }
+    }
+    const moon = new Grid(cols, rows); moon.stamp(MOON, cols - 10, top);
+    const hill = new Grid(cols, rows); hills(hill, gr, 'F', 5, 2, 4);
+    const ground = new Grid(cols, rows);
+    ground.rect(0, gr, cols, rows - gr, 'I');
+    for (let n = 0; n < cols * (rows - gr) / 6; n++) ground.set(Math.floor(rnd() * cols), gr + 1 + Math.floor(rnd() * (rows - gr)), 'H');
+    return [[sky, false], [stars, false], [moon, true], [hill, true], [ground, true]];
+  }},
+  { name: 'Beach', clouds: true, build(cols, rows, gr, rnd, top) {
+    const sky = new Grid(cols, rows); skyBands(sky, gr, ['1', '2', '3', '4', 'Z', 'X']);
+    const sun = new Grid(cols, rows); sun.stamp(SUN, cols - 9, top);
+    const sea = new Grid(cols, rows);
+    sea.rect(0, gr - 5, cols, 5, 'J');
+    for (let n = 0; n < cols / 3; n++) {
+      const i = Math.floor(rnd() * cols), j = gr - 4 + Math.floor(rnd() * 4);
+      sea.rect(i, j, 2 + Math.floor(rnd() * 2), 1, 'K');
+    }
+    const sand = new Grid(cols, rows);
+    sand.rect(0, gr, cols, rows - gr, 'M');
+    for (let n = 0; n < cols * (rows - gr) / 6; n++) {
+      sand.set(Math.floor(rnd() * cols), gr + 1 + Math.floor(rnd() * (rows - gr)), rnd() < 0.85 ? 'N' : 'P');
+    }
+    return [[sky, false], [sun, true], [sea, true], [sand, true]];
+  }},
+];
+if (G.scene >= SCENES.length) G.scene = 0;
+
+// Render a scene (static layers) to a canvas of w x h CSS px, block size B.
+function buildScene(idx, w, h, B, groundY, topPx = 0) {
+  const c = document.createElement('canvas');
+  c.width = Math.round(w * DPR); c.height = Math.round(h * DPR);
+  const x = c.getContext('2d');
+  const sc = SCENES[idx];
+  if (sc.paper) {
+    x.fillStyle = '#fbf8f1'; x.fillRect(0, 0, c.width, c.height);
+    x.strokeStyle = '#6d6a70'; x.lineWidth = Math.max(1, DPR * 1.5);
+    x.beginPath(); x.moveTo(0, groundY * DPR); x.lineTo(c.width, groundY * DPR - 2 * DPR); x.stroke();
+    return c;
+  }
+  const p = Math.max(1, Math.round(B * DPR));
+  const cols = Math.ceil(c.width / p) + 1, rows = Math.ceil(c.height / p) + 1;
+  const gr = Math.round(groundY * DPR / p);
+  const layers = sc.build(cols, rows, gr, seeded(idx * 7919 + 17), Math.max(2, Math.ceil(topPx * DPR / p)));
+  for (const [grid, outline] of layers) {
+    const s = makeSprite(grid.toRows(), B, outline);
+    x.drawImage(s, -s.ow, -s.ow);
+  }
+  return c;
+}
+
+function drawBackground() {
+  const sc = SCENES[G.scene];
+  if (sc.paper) {
+    drawPaper();
+    pencilLine(-10, L.groundY + 2, W + 10, L.groundY - 2, 5);
+    return;
+  }
+  const key = 'bg' + G.scene + '|' + W + 'x' + H;
+  let bg = spriteCache.get(key);
+  if (!bg) { bg = buildScene(G.scene, W, H, L.petPx, L.groundY, safeTop + Math.max(28, Math.min(48, W * 0.09)) + 30); spriteCache.set(key, bg); }
+  ctx.drawImage(bg, 0, 0, W, H);
+  if (sc.clouds) {
+    const cs = sprite('cloud', CLOUD, L.petPx);
+    const cw = sw(cs);
+    for (const cl of G.clouds) {
+      const span = W + cw * 2;
+      const cx = ((cl.fx * span + G.time * cl.speed) % span) - cw;
+      ctx.drawImage(cs, cx, cl.y, cw, sh(cs));
+    }
+  }
+}
+
+function makeClouds() {
+  G.clouds = [];
+  for (let i = 0; i < 4; i++) {
+    G.clouds.push({ fx: i / 4 + rand(0, 0.15), y: rand(0.12, 0.45) * L.groundY, speed: rand(8, 20) });
+  }
+}
+
+function sceneThumb(idx, tw, th) {
+  const key = 'thumb' + idx + '|' + tw + 'x' + th;
+  let t = spriteCache.get(key);
+  if (!t) {
+    const B = Math.max(2, Math.round(tw / 28));
+    t = buildScene(idx, tw, th, B, Math.round(th * 0.72 / B) * B);
+    spriteCache.set(key, t);
+  }
+  return t;
 }
 
 // ---------------------------------------------------------------------------
@@ -583,17 +867,19 @@ function drawSelect() {
   ctx.fillText('Pick your pet!', W / 2, titleBottom + subSize * 0.7);
   ctx.restore();
 
+  const bestH = G.best > 0 ? 30 : 8;
   if (G.best > 0) {
     ctx.save();
-    ctx.font = `${Math.min(22, W * 0.05)}px ${HAND_FONT}`;
+    ctx.font = `${Math.min(20, W * 0.05)}px ${HAND_FONT}`;
     ctx.fillStyle = '#6d6a70';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`Best score: ${G.best}`, W / 2, H - safeBottom - 22);
+    ctx.fillText(`Best score: ${G.best}`, W / 2, H - safeBottom - 16);
     ctx.restore();
   }
+  const sceneH = drawScenePicker(H - safeBottom - bestH);
   const cardsTop = titleBottom + subSize * 1.6;
-  const footer = 44 + safeBottom;
+  const footer = sceneH + bestH + safeBottom + 8;
   const cols = W > H * 1.2 ? 5 : 3;
   const rowsN = Math.ceil(PETS.length / cols);
   const gap = 12;
@@ -613,9 +899,55 @@ function drawSelect() {
   drawCards(cols, cw, ch, gap, cardsTop, availH);
 }
 
+// Row of background thumbnails; bottom edge at `bottom`. Returns its height.
+function drawScenePicker(bottom) {
+  const n = SCENES.length, gap = 10;
+  const tw = Math.floor(Math.min(84, (W - 32 - gap * (n - 1)) / n));
+  const th = Math.round(tw * 0.75);
+  const labelSize = Math.min(24, W * 0.055), nameSize = Math.max(12, Math.min(15, tw * 0.2));
+  const h = labelSize * 1.4 + th + nameSize * 1.6;
+  const top = bottom - h;
+
+  ctx.save();
+  ctx.font = `${labelSize}px ${HAND_FONT}`;
+  ctx.fillStyle = '#3d3940';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('Pick a place!', W / 2, top + labelSize * 0.6);
+  ctx.restore();
+
+  const rowW = n * tw + (n - 1) * gap;
+  const y = top + labelSize * 1.4;
+  SCENES.forEach((sc, i) => {
+    const x = (W - rowW) / 2 + i * (tw + gap);
+    const sel = i === G.scene;
+    ctx.save();
+    roundRect(x, y, tw, th, 10);
+    ctx.clip();
+    ctx.drawImage(sceneThumb(i, tw, th), x, y, tw, th);
+    ctx.restore();
+    ctx.save();
+    roundRect(x, y, tw, th, 10);
+    ctx.lineWidth = sel ? 5 : 2.5;
+    ctx.strokeStyle = sel ? '#ff4f9a' : OUTLINE;
+    ctx.stroke();
+    ctx.font = `${nameSize}px ${HAND_FONT}`;
+    ctx.fillStyle = sel ? '#ff4f9a' : '#3d3940';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(sc.name, x + tw / 2, y + th + nameSize * 0.9);
+    ctx.restore();
+    G.buttons.push({ x, y, w: tw, h: th + nameSize * 1.6, action: () => {
+      G.scene = i;
+      localStorage.setItem('snackattack-scene', String(i));
+    }});
+  });
+  return h;
+}
+
 function drawCards(cols, cw, ch, gap, cardsTop, availH) {
   const rowsN = Math.ceil(PETS.length / cols);
-  cardsTop += Math.min(40, Math.max(0, (availH - (rowsN * ch + (rowsN - 1) * gap)) / 2));
+  cardsTop += Math.max(0, (availH - (rowsN * ch + (rowsN - 1) * gap)) / 2);
   const nameSize = Math.min(24, cw * 0.15);
   const px = Math.max(2, Math.floor(Math.min(cw * 0.62 / 12, (ch - nameSize * 2.2) * 0.85 / 14)));
 
@@ -658,20 +990,38 @@ function drawCards(cols, cw, ch, gap, cardsTop, availH) {
 }
 
 function drawPlayfield() {
-  drawPaper();
-  pencilLine(-10, L.groundY + 2, W + 10, L.groundY - 2, 5);
+  drawBackground();
 
   for (const it of G.items) {
     drawSprite(it.s, it.x, it.y, { rot: Math.sin(G.time * 4 + it.phase) * 0.15 });
   }
 
+  // visitors: landing shadow, then the bouncing pet
+  for (const v of G.visitors) {
+    const { p, lift } = visitorPos(v);
+    const nextX = v.x0 + v.dir * (Math.floor(Math.abs(v.x - v.x0) / v.hop) + 1) * v.hop;
+    const near = 1 - p; // shadow grows as they come down
+    ctx.save();
+    ctx.globalAlpha = 0.18 + 0.3 * near * near;
+    ctx.fillStyle = SCENES[G.scene].dark ? '#ffffff' : '#2a2228';
+    ctx.beginPath();
+    ctx.ellipse(nextX, L.groundY, petSize().w * (0.3 + 0.25 * near), L.petPx * 1.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    const vs = petWalkSprite(v.i, L.petPx, v.dir, p < 0.5 ? 1 : 2);
+    drawSprite(vs, v.x, L.groundY - lift, { sx: 1 + 0.2 * v.sq, sy: 1 - 0.2 * v.sq, rot: v.dir * 0.12 * (p - 0.5), bottom: true });
+  }
+
   // the pet
-  const ps = petSprite(G.pet, L.petPx);
+  const walking = G.state === 'play' && G.facing !== 0;
+  const ps = petWalkSprite(G.pet, L.petPx, G.state === 'play' ? G.facing : 0,
+    walking && G.moving ? 1 + (Math.floor(G.time * 9) % 2) : 0);
   const sq = G.squash;
   const bob = G.state === 'play' && G.moving ? Math.abs(Math.sin(G.time * 14)) * -4 : 0;
+  const blink = G.invuln > 0 && G.hurt <= 0 && Math.floor(G.time * 10) % 2 === 0;
   const shake = G.hurt > 0 ? Math.sin(G.time * 60) * 5 * (G.hurt / 0.6) : 0;
-  if (!(G.hurt > 0 && Math.floor(G.time * 16) % 2 === 0)) {
-    drawSprite(ps, G.petX + shake, L.groundY + bob, { sx: 1 + 0.18 * sq, sy: 1 - 0.15 * sq, bottom: true });
+  if (!blink && !(G.hurt > 0 && Math.floor(G.time * 16) % 2 === 0)) {
+    drawSprite(ps, G.petX + shake, L.groundY + bob, { sx: 1 + 0.18 * sq, sy: 1 - 0.15 * sq, rot: walking ? G.facing * 0.05 : 0, bottom: true });
   }
 
   for (const p of G.parts) {
@@ -693,7 +1043,7 @@ function drawPlayfield() {
 function drawHud() {
   const top = safeTop + 12;
   const size = Math.max(28, Math.min(48, W * 0.09));
-  outlinedText(String(G.score), 16, top + size / 2, size, '#1e4fa3', { align: 'left' });
+  outlinedText(String(G.score), 16, top + size / 2, size, SCENES[G.scene].dark ? '#ffcf3f' : '#1e4fa3', { align: 'left' });
 
   // favorite snack hint under the score
   const fs = snackSprite(PETS[G.pet].fav, L.hudPx);
