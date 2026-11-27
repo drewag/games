@@ -53,8 +53,10 @@ The game is played in landscape on an iPad. On-screen buttons sit under the thum
 - **Look back**, beside Power, held to look behind: the camera flips to face back down
   the road from in front of the kart, and snaps back when let go.
 
-With neither steering button held, the kart eases toward the road ahead on its own. That
-makes steering a correction, not a constant job. Arrow keys and space work on a computer,
+There's no steering help: with neither button held the kart goes straight, so you steer
+it round every bend yourself. (We're trying this out; Easy driving used to ease the kart
+toward the road ahead on its own. The `STEERING_HELP` switch in `index.html` turns that
+back on.) After the finish line the kart drives itself. Arrow keys and space work on a computer,
 E swaps the spare, and C or Q looks back.
 
 ### Pro driving
@@ -107,8 +109,8 @@ color; yours is the biggest, ringed in white. After the third lap, a card shows 
   much less when slow.
 - **Forks**: on every track but the Park, the road splits in places and joins again further
   on, with the border running down the middle between the two. Keep to the side the
-  branch goes, or steer into it, to take it. In Easy driving the kart follows whichever
-  road it's on. Rivals take branches a little under half the time.
+  branch goes, or steer into it, to take it. Rivals take branches a little under half the
+  time.
 - **Hazards** sit across shortcuts, right after a ramp: the road stops and starts again on
   the far side. **Rough ground** (long grass in the Backyard) slows a kart that lands in it
   to a crawl. **Water** (a creek on Snow, syrup in the Bakery, bath water in the Toy Room)

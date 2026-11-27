@@ -37,6 +37,7 @@ match it.
 - [ ] Forks and jumps on the iPad: are the forks easy to see coming? Are the hazard costs
   (1.6 s rough, 3 s water) right? Do kids hit the side ramps, or need them wider?
 - [ ] Rivals' items on the iPad: too mean for Zachary on the easy tracks? Tune the wait between items
+- [ ] Easy driving without steering help: can Zachary get round? If not, set `STEERING_HELP` back on
 - [ ] Race with three or more real iPads: check smoothness and Wi-Fi drops
 
 ## Later

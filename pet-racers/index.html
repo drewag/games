@@ -1102,8 +1102,8 @@ function balance(br) {
   if (risk > 0.9) console.warn('Pet Racers: a shortcut saves more than its hazards can make up for', br);
   const len = gapFor(Math.min(risk, 1));
   for (const g of br.gaps) Object.assign(g, { a: g.ramp + RAMP_LEN * step, b: g.ramp + (RAMP_LEN + len) * step, len, risk });
-  // Ramps sit to one side, swapping sides, so the steering help's pull toward
-  // the middle doesn't line you up by itself: you have to aim.
+  // Ramps sit to one side, swapping sides, so driving down the middle doesn't
+  // line you up by itself: you have to aim.
   br.gaps.sort((x, y) => x.a - y.a).forEach((g, k) => { g.lat = (k % 2 ? -1 : 1) * (br.half - RAMP_W / 2 - 0.6); });
 }
 
@@ -2037,6 +2037,7 @@ const sfx = (name, ...a) => { if (AC && SFX[name]) SFX[name](...a); };
 const LAPS = 3;
 const input = { left: false, right: false, gas: false, back: false, hop: false, look: false };
 let pro = false;              // Pro driving: gas, hop and drift, no steering help
+const STEERING_HELP = false;  // Easy driving: ease toward the road when no steering button is held
 let player = RACERS[0];
 let friends = [];             // other people's racers, when racing friends
 let rivals = RACERS.slice(1);
@@ -2296,8 +2297,10 @@ function updatePlayer(dt, canDrive) {
     me.heading -= me.steer * 1.7 * grip * air * (me.speed < 0 ? -1 : 1) * dt;
   }
 
-  // Steering help: with no button held, ease toward the road ahead.
-  if (easy && !want && me.speed > 1) {
+  // Steering help: with no button held, ease toward the road ahead. Off for
+  // now in Easy driving (you steer yourself); the kart still drives itself
+  // after the finish line.
+  if ((state === 'done' || (easy && STEERING_HELP)) && !want && me.speed > 1) {
     const aim = aheadPoint(path, me.pf, 20, THREE.MathUtils.clamp(lat, -path.half + 2, path.half - 2) * 0.6);
     me.heading += angleTo(me.heading, Math.atan2(aim.x - me.pos.x, aim.z - me.pos.z)) * Math.min(1, dt * 1.6);
   }
