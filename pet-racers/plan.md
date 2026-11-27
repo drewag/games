@@ -26,6 +26,7 @@ match it.
 - [x] Forks and jumps on every track but the Park; rivals take branches and jump
 - [x] Narrow boost ramps; shortcuts over rough ground or water, balanced by a formula; boost lanes
 - [x] Mini map in the top right
+- [x] Rivals use items, their powers included
 
 ## Next
 
@@ -35,6 +36,7 @@ match it.
 - [ ] Items on the iPad: odds of the power, peel and cherry sizes, where the Spare button sits
 - [ ] Forks and jumps on the iPad: are the forks easy to see coming? Are the hazard costs
   (1.6 s rough, 3 s water) right? Do kids hit the side ramps, or need them wider?
+- [ ] Rivals' items on the iPad: too mean for Zachary on the easy tracks? Tune the wait between items
 - [ ] Race with three or more real iPads: check smoothness and Wi-Fi drops
 
 ## Later

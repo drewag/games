@@ -56,8 +56,9 @@ most often a favorite food. Each one gives the pet its own way to race:
   about 20 kart-lengths). A green trail of thought reaches each one, and they forget
   they're racing and spin out ("Mind read!"). Halsy wants to be at the back of a pack.
 
-Rivals don't use powers or items. They can only be bumped or spun out, which keeps races friendly
-for younger players.
+Rivals use items too, their own power included, the same way you do (see
+[play](play.md#rivals-items)). A rival's Instant Hacking, Brave Mode or Fashion Shoot works
+just like yours.
 
 The powers come from the "Powers" line on each card. Several cards also list love,
 kindness and friendship, which are shared by everyone and aren't powers here. Plufulous's

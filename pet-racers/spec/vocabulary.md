@@ -6,7 +6,7 @@ first column is the one you want.
 | Term | Means | Defined in | We don't say |
 |---|---|---|---|
 | Racer | The pet you picked and are driving | racers.md | player character, driver, hero |
-| Rival | A pet driven by the computer | racers.md | opponent, AI, CPU, enemy, bot |
+| Rival | A pet driven by the computer; it uses items too | racers.md | opponent, AI, CPU, enemy, bot |
 | Kart | The food-shaped vehicle a pet rides | racers.md | car, vehicle |
 | Power | A pet's own special move, one of the items | racers.md | ability, special, super |
 | Item | What a snack gives: Banana Peel, Cherry, Hot Pepper, or the pet's power | play.md | ability, pickup, weapon |

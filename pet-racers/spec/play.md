@@ -142,14 +142,29 @@ The items:
 Further back in the race, the power and the Hot Pepper come up more often and the peel less,
 so whoever's behind gets the help.
 
-Rivals eat snacks too, which takes them away from you, but they don't get items. Duffy
-still gets a nibble boost from every snack.
+Duffy still gets a nibble boost from every snack.
+
+### Rivals' items
+
+Rivals eat snacks too, which takes them away from you, and each snack gives a rival an
+item the same way (favorites and place count the same), but a rival holds only one at a
+time and has no spare. They use them sensibly rather than at random: a peel or a cake
+when someone is close behind, a cherry when someone is ahead in their lane, a Sports Ball
+or Math Defeater when someone is ahead, Gaming Knockout in a crowd, Fashion Shoot with
+someone just behind, and the pepper, Speed Eating and Brave Mode whenever. A rival that
+can't find a good moment uses its item after ten seconds anyway. After using one, a rival
+waits a few seconds before the next: 4 on the harder tracks, 7 on the easy ones.
+
+Rivals' items hit everyone, you, friends and other rivals, just like yours. Only your own
+hits pop up a word on your screen; you hear the others when they're near you. In a room,
+the room maker's iPad runs the rivals' items and tells everyone what they hit.
 
 ## Spinning out
 
-A rival hit by a power or an item **spins out**: their kart twirls, they slow to a crawl for about
-1.5 seconds, and "Bonk!" pops up. Then they carry on. Rivals never spin you out, because
-they don't use items. A banana peel can, even your own, and so can a friend's items.
+Any kart hit by a power or an item **spins out**: it twirls and slows to a crawl for about
+1.5 seconds, then carries on. "Bonk!" (or the item's word) pops up when you did the hitting
+or got hit. Anyone's items can spin you out, a rival's or a friend's, and a banana peel can,
+even your own.
 
 ## Sound
 

@@ -40,7 +40,9 @@ mid-race or to a full room gets `no {why: busy | full}` and is closed.
   so. Every iPad works out rivals' jumps for itself from where they are. Catch-up uses the average progress of everyone in the room.
 - **A power's owner decides what it hits.** Effects are mirrored with `fx {o, k, ...}` (the
   owner's pet, then ring, ball, cake, plus, hack, flash, mind or peel; a ball or cherry
-  also says which branch it was thrown on), and only the owner checks for hits. A hit on a
+  also says which branch it was thrown on), and only the owner checks for hits. The host
+owns the rivals' items: it decides when rivals use them, sends their `fx` like anyone's,
+and checks what they hit, friends included. A hit on a
   friend, or on a rival when we aren't the host, is sent as `spin {who}`. The host applies
   rival spins and forwards every `spin`, `fx` and `gone` to the other guests. Each iPad
   acts only on a `spin` for its own pet.

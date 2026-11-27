@@ -969,6 +969,7 @@ for (const r of RACERS) {
     padT: 0, padCd: 0,                                                      // boost pads
     path: null, pf: 0, plat: 0, bs: 0, s0: 0, netBs: 0, airY: 0, vy: 0,     // branches and jumps
     sunk: 0, sunkIn: null, fails: null,
+    itemCd: 0, think: 0, held: 0,                                           // rivals' items
     hopT: 0, hopY: 0, hopHeld: false, hopWas: false, drift: 0, driftLv: 0, driftYaw: 0,  // Pro driving
     charge: 0, boost: 0, stall: 0, gasAt: null,
     netS: 0, netLat: 0, remote: null,                                       // over the network
@@ -1810,7 +1811,7 @@ const cherryGeo = merge([
 ]);
 
 let fxCount = 0;
-const newId = () => `${player.name}-${fxCount++}`;
+const newId = (owner = player) => `${owner.name}-${fxCount++}`;
 
 // A ball rolls down the road and spins out the first kart it touches: Choco's
 // Sports Ball bounces off the hedges; a cherry goes straight and quicker.
@@ -2067,6 +2068,7 @@ function resetRace() {
       s: (f / N) * TL, lat, netS: (f / N) * TL, netLat: lat, skill: skills[k] || 0.9, phase: k * 1.7,
       steer: 0, idx: Math.floor(wrap(f)), lap: 0, item: null, spare: null, rollT: 0, rush: 0, nibble: 0, brave: 0, remote: null,
       padT: 0, padCd: 0, path: MAIN, pf: Math.floor(wrap(f)), plat: lat, bs: 0, s0: 0, netBs: 0, airY: 0, vy: 0, sunk: 0, sunkIn: null, fails: null,
+      itemCd: 0, think: 0, held: 0,
       hopT: 0, hopY: 0, hopHeld: false, drift: 0, driftLv: 0, driftYaw: 0, charge: 0, boost: 0, stall: 0, gasAt: null });
   });
   for (const p of snacks) { p.gone = 0; p.m.visible = true; }
@@ -2417,9 +2419,13 @@ function updateRivals(dt, canDrive) {
     let target = canDrive ? MAX_SPEED * r.skill * band * (track.rivals || 1) : 0;
     if (onPad(rivalPath(r), rivalF(r), r.lat)) r.padT = 1;
     if (r.padT > 0 && canDrive) { target = Math.max(target, MAX_SPEED * 1.25); r.padT -= dt; }
+    if (r.rush > 0) target *= 1.4;                       // a rival's Speed Eating
     if (r.airY <= 0 && hazardAt(rivalPath(r), rivalF(r))) target *= 0.35;
     if (r.spin > 0) target *= 0.25;
-    if (r.airY <= 0) r.speed += (target - r.speed) * Math.min(1, dt * (target > r.speed ? (r.padT > 0 ? 3 : 0.8) : 3));
+    if (r.airY <= 0) r.speed += (target - r.speed) * Math.min(1, dt * (target > r.speed ? (r.padT > 0 || r.rush > 0 ? 3 : 0.8) : 3));
+    r.rush = Math.max(0, r.rush - dt);
+    r.brave = Math.max(0, r.brave - dt);
+    r.boost = Math.max(0, r.boost - dt);
     advanceRival(r, r.speed * dt, true);
     updateAir(r, dt);
     const rpath = rivalPath(r), half = rpath.half, rf = rivalF(r);
@@ -2453,12 +2459,14 @@ function updateFriends(dt) {
 }
 
 // Spin out another racer. Whoever drives that racer gets told.
-function spinOut(r, text = 'Bonk!') {
-  if (r === player || r.spin > 0 || r.brave > 0) return false;
+// Spin out a racer, hit by `by`'s item. Whoever drives that racer gets told.
+function spinOut(r, text = 'Bonk!', by = player) {
+  if (r.spin > 0 || r.brave > 0 || r.sunk > 0) return false;
+  if (r === player) { getHit(text); return true; }
   if (friends.includes(r) || !drivesRivals()) send({ t: 'spin', who: r.name, text });
   r.spin = 1.5;
-  showPop(text);
-  sfx('bonk');
+  if (by === player) showPop(text);
+  if (near(r)) sfx('bonk');
   for (let k = 0; k < 5; k++) puff(r.pos.clone().setY(1.2), '#ffcf3f', 0.5);
   return true;
 }
@@ -2512,7 +2520,8 @@ function syncRacers(t, dt = 0) {
         if (r === player) r.pos.addScaledVector(d, sign * push * 0.6);
         else if (!friends.includes(r) && drivesRivals()) r.lat += sign * d.dot(pathRight(rivalPath(r), rivalF(r))) * push * 0.4;
       }
-      if (player.brave > 0 && (A === player || B === player)) spinOut(A === player ? B : A);
+      // Brave Mode spins out whoever it touches; this iPad decides for what it drives.
+      for (const [me, other] of [[A, B], [B, A]]) if (me.brave > 0 && owns(me)) spinOut(other, 'Bonk!', me);
     }
   }
 }
@@ -2533,6 +2542,7 @@ function updateSnacks(dt, t) {
       p.gone = 5; p.m.visible = false;
       puff(p.m.position.clone());
       if (r === player) eat(p.food);
+      else if (rivals.includes(r) && drivesRivals()) rivalEat(r, p.food);
       break;
     }
   }
@@ -2548,9 +2558,9 @@ const ITEMS = {
   'Hot Pepper': { icon: '🌶️', label: 'Hot<br>Pepper' },
   power: { icon: '★', label: '' },                       // the pet's Power
 };
-function rollItem(food) {
-  const fav = [].concat(player.food).includes(food);
-  const back = (placeOf(player) - 1) / (RACERS.length - 1);   // 0 in front, 1 at the back
+function rollItem(food, me = player) {
+  const fav = [].concat(me.food).includes(food);
+  const back = (placeOf(me) - 1) / (RACERS.length - 1);       // 0 in front, 1 at the back
   if (Math.random() < (fav ? 0.5 : 0.1 + back * 0.25)) return 'power';
   const w = [['Banana Peel', 1.2 - back * 0.8], ['Cherry', 1], ['Hot Pepper', 0.5 + back * 0.9]];
   let k = Math.random() * w.reduce((a, [, n]) => a + n, 0);
@@ -2565,6 +2575,12 @@ function eat(food) {
   if (!player.item) { player.item = rollItem(food); player.rollT = 0.6; }
   else if (!player.spare) { player.spare = rollItem(food); sfx(player.spare === 'power' ? 'full' : 'got'); }
 }
+function rivalEat(r, food) {
+  if (state !== 'race' || r.item) return;
+  r.item = rollItem(food, r);
+  r.held = 0;
+  r.think = 0.6 + Math.random();
+}
 // Tap the spare to swap it with the item in hand.
 function swapItems() {
   if (state !== 'race' || !player.spare || player.rollT > 0) return;
@@ -2574,115 +2590,139 @@ function swapItems() {
 const itemName = (it) => (it === 'power' ? player.power : it);
 
 // --- the powers ------------------------------------------------------------
-// The nearest kart ahead (in track points), within `reach` world units.
-function nextAhead(reach) {
-  const me = progressOf(player);
+// The nearest kart ahead of `me` (in track points), within `reach` world units.
+function nextAhead(me, reach) {
+  const at = progressOf(me);
   let best = null, gap = (reach / TL) * N;
-  for (const r of others()) {
-    const d = progressOf(r) - me;
+  for (const r of othersOf(me)) {
+    const d = progressOf(r) - at;
     if (d > 0 && d < gap) { gap = d; best = r; }
   }
   return best && { r: best, gap };
 }
-
-// Just ahead of the player on the road they're on.
-const throwFrom = () => ({ f: player.pf + 4 * stepOf(player.path), lat: player.plat, pi: BRANCHES.indexOf(player.path) + 1 });
+// The nearest kart behind, the same way.
+function nextBehind(me, reach) {
+  const at = progressOf(me);
+  return othersOf(me).some((r) => { const d = at - progressOf(r); return d > 0 && d < (reach / TL) * N; });
+}
+const othersOf = (me) => RACERS.filter((r) => r !== me);
+// Where a kart is on the road it's on: path, sample, lane.
+const placeOnRoad = (r) => (isHuman(r) ? { path: r.path || MAIN, f: r.pf, lat: r.plat } : { path: rivalPath(r), f: rivalF(r), lat: r.lat });
+// Just ahead of a kart on the road it's on.
+const throwFrom = (me) => {
+  const { path, f, lat } = placeOnRoad(me);
+  return { f: f + 4 * stepOf(path), lat, pi: BRANCHES.indexOf(path) + 1 };
+};
+// Only the person using something hears its "Cake!"; everyone near hears it.
+const say = (me, text) => { if (me === player) showPop(text); };
+const near = (me) => me === player || me.pos.distanceTo(player.pos) < 35;
 
 const BASICS = {
-  'Banana Peel'() {
-    const at = player.pos.clone().addScaledVector(fwdOf(player), -2.6);
-    const id = newId();
-    addPeel(player, id, at.x, at.z);
-    send({ t: 'fx', k: 'peel', o: player.name, id, x: at.x, z: at.z });
-    showPop('Peel!');
+  'Banana Peel'(me) {
+    const at = me.pos.clone().addScaledVector(fwdOf(me), -2.6);
+    const id = newId(me);
+    addPeel(me, id, at.x, at.z);
+    send({ t: 'fx', k: 'peel', o: me.name, id, x: at.x, z: at.z });
+    say(me, 'Peel!');
   },
-  Cherry() {
-    const b = { id: newId(), ...throwFrom(), latVel: 0, kind: 'cherry' };
-    addBall(player, b.id, b.f, b.lat, 0, 'cherry', b.pi);
-    send({ t: 'fx', k: 'ball', o: player.name, ...b });
-    showPop('Cherry!');
+  Cherry(me) {
+    const b = { id: newId(me), ...throwFrom(me), latVel: 0, kind: 'cherry' };
+    addBall(me, b.id, b.f, b.lat, 0, 'cherry', b.pi);
+    send({ t: 'fx', k: 'ball', o: me.name, ...b });
+    say(me, 'Cherry!');
   },
-  'Hot Pepper'() {
-    player.boost = Math.max(player.boost, 1.6);
-    for (let k = 0; k < 8; k++) puff(player.pos.clone().setY(0.6).addScaledVector(fwdOf(player), -1.4), k % 2 ? '#e53935' : '#ff8a1c', 0.5);
-    showPop('Hot hot hot!');
+  'Hot Pepper'(me) {
+    me.boost = Math.max(me.boost, 1.6);
+    if (!isHuman(me)) me.padT = Math.max(me.padT, 1.6);
+    for (let k = 0; k < 8; k++) puff(me.pos.clone().setY(0.6).addScaledVector(fwdOf(me), -1.4), k % 2 ? '#e53935' : '#ff8a1c', 0.5);
+    say(me, 'Hot hot hot!');
   },
 };
 
 const POWERS = {
-  'Gaming Knockout'() {
-    burstRing(player);
-    send({ t: 'fx', k: 'ring', o: player.name });
+  'Gaming Knockout'(me) {
+    burstRing(me);
+    send({ t: 'fx', k: 'ring', o: me.name });
     let hit = 0;
-    for (const r of others()) if (r.pos.distanceTo(player.pos) < 11 && spinOut(r)) hit++;
-    if (!hit) showPop('Whoosh!');
+    for (const r of othersOf(me)) if (r.pos.distanceTo(me.pos) < 11 && spinOut(r, 'Bonk!', me)) hit++;
+    if (!hit) say(me, 'Whoosh!');
   },
-  'Speed Eating'() { player.rush = 3; showPop('Sugar rush!'); },
-  'Sports Ball'() {
-    const at = throwFrom();
-    const rel = angleTo(pathHeading(player.path, at.f), player.heading);
-    const b = { id: newId(), ...at, latVel: -Math.sin(rel) * 30 };
-    addBall(player, b.id, b.f, b.lat, b.latVel, 'ball', b.pi);
-    send({ t: 'fx', k: 'ball', o: player.name, ...b });
-    showPop('Kick!');
+  'Speed Eating'(me) { me.rush = 3; say(me, 'Sugar rush!'); },
+  'Sports Ball'(me) {
+    const at = throwFrom(me), { path } = placeOnRoad(me);
+    const rel = angleTo(pathHeading(path, at.f), me.heading);
+    const b = { id: newId(me), ...at, latVel: -Math.sin(rel) * 30 };
+    addBall(me, b.id, b.f, b.lat, b.latVel, 'ball', b.pi);
+    send({ t: 'fx', k: 'ball', o: me.name, ...b });
+    say(me, 'Kick!');
   },
-  'Instant Cake'() {
-    const at = player.pos.clone().addScaledVector(fwdOf(player), -2.6);
-    const id = newId();
-    addCake(player, id, at.x, at.z);
-    send({ t: 'fx', k: 'cake', o: player.name, id, x: at.x, z: at.z });
-    showPop('Cake!');
+  'Instant Cake'(me) {
+    const at = me.pos.clone().addScaledVector(fwdOf(me), -2.6);
+    const id = newId(me);
+    addCake(me, id, at.x, at.z);
+    send({ t: 'fx', k: 'cake', o: me.name, id, x: at.x, z: at.z });
+    say(me, 'Cake!');
   },
-  'Brave Mode'() { player.brave = 4; showPop('Brave!'); },
-  'Math Defeater'() {
-    const ahead = nextAhead(70);
-    // On a branch it sets off straight from the kart rather than along the main loop.
-    const off = !player.path.main;
-    const p = { id: newId(), f: player.idx + 3, lat: off ? 0 : player.plat, target: ahead ? ahead.r.name : '',
-      ...(off ? { x: player.pos.x, z: player.pos.z } : {}) };
-    addPlus(player, p.id, p.f, p.lat, p.target, p.x, p.z);
-    send({ t: 'fx', k: 'plus', o: player.name, ...p });
-    showPop('1 + 1 = 2!');
+  'Brave Mode'(me) { me.brave = 4; say(me, 'Brave!'); },
+  'Math Defeater'(me) {
+    const ahead = nextAhead(me, 70), { path, lat } = placeOnRoad(me);
+    // Off the main loop it sets off straight from the kart rather than along the road.
+    const off = !path.main;
+    const p = { id: newId(me), f: Math.floor(progressOf(me)) + 3, lat: off ? 0 : lat, target: ahead ? ahead.r.name : '',
+      ...(off ? { x: me.pos.x, z: me.pos.z } : {}) };
+    addPlus(me, p.id, p.f, p.lat, p.target, p.x, p.z);
+    send({ t: 'fx', k: 'plus', o: me.name, ...p });
+    say(me, '1 + 1 = 2!');
   },
-  'Instant Hacking'() {
+  'Instant Hacking'(me) {
     // Pop up just in front of the next kart, or a little way on if nobody's close.
-    const ahead = nextAhead(50), step = N / TL;
-    const to = progressOf(player) + (ahead ? ahead.gap + 5 * step : 25 * step);
-    const from = player.pos.clone();
-    const lat = THREE.MathUtils.clamp(player.plat, -HALF + 1.5, HALF - 1.5);
-    player.lap = Math.floor(to / N) + 1;
-    player.idx = Math.floor(wrap(to));
-    Object.assign(player, { path: MAIN, pf: player.idx, plat: lat });
-    trackPoint(to, lat, player.pos);
-    player.heading = headingAt(to);
-    hackFx(player, from, player.pos);
-    send({ t: 'fx', k: 'hack', o: player.name, x: from.x, z: from.z, x2: player.pos.x, z2: player.pos.z });
-    showPop('Hacked!');
-  },
-  'Mind Access'() {
-    // Into the minds of the next two karts ahead: they forget they're racing.
-    const me = progressOf(player), reach = (60 / TL) * N;
-    const targets = others().filter((r) => { const d = progressOf(r) - me; return d > 0 && d < reach; })
-      .sort((a, b) => progressOf(a) - progressOf(b)).slice(0, 2);
-    mindFx(player, targets);
-    send({ t: 'fx', k: 'mind', o: player.name, who: targets.map((r) => r.name) });
-    let hit = 0;
-    for (const r of targets) if (spinOut(r, 'Mind read!')) hit++;
-    if (!hit) showPop('Hmm…');
-  },
-  'Fashion Shoot'() {
-    flashFx(player);
-    screenFlash(0.3);
-    send({ t: 'fx', k: 'flash', o: player.name });
-    const fwd = fwdOf(player);
-    let hit = 0;
-    for (const r of others()) {
-      const d = r.pos.clone().sub(player.pos).setY(0);
-      if (d.length() < 16 && d.dot(fwd) < 1 && spinOut(r, 'Flash!')) hit++;
+    const ahead = nextAhead(me, 50), step = N / TL;
+    const to = progressOf(me) + (ahead ? ahead.gap + 5 * step : 25 * step);
+    const from = me.pos.clone();
+    const lat = THREE.MathUtils.clamp(placeOnRoad(me).lat, -HALF + 1.5, HALF - 1.5);
+    if (me === player) {
+      me.lap = Math.floor(to / N) + 1;
+      me.idx = Math.floor(wrap(to));
+      Object.assign(me, { path: MAIN, pf: me.idx, plat: lat });
+      me.heading = headingAt(to);
+    } else {
+      Object.assign(me, { path: MAIN, bs: 0, s: (to / N) * TL, netS: (to / N) * TL, lat });
     }
-    if (!hit) showPop('Say cheese!');
+    trackPoint(to, lat, me.pos);
+    hackFx(me, from, me.pos);
+    send({ t: 'fx', k: 'hack', o: me.name, x: from.x, z: from.z, x2: me.pos.x, z2: me.pos.z });
+    say(me, 'Hacked!');
+  },
+  'Mind Access'(me) {
+    // Into the minds of the next two karts ahead: they forget they're racing.
+    const at = progressOf(me), reach = (60 / TL) * N;
+    const targets = othersOf(me).filter((r) => { const d = progressOf(r) - at; return d > 0 && d < reach; })
+      .sort((a, b) => progressOf(a) - progressOf(b)).slice(0, 2);
+    mindFx(me, targets);
+    send({ t: 'fx', k: 'mind', o: me.name, who: targets.map((r) => r.name) });
+    let hit = 0;
+    for (const r of targets) if (spinOut(r, 'Mind read!', me)) hit++;
+    if (!hit) say(me, 'Hmm…');
+  },
+  'Fashion Shoot'(me) {
+    flashFx(me);
+    if (me === player) screenFlash(0.3);
+    send({ t: 'fx', k: 'flash', o: me.name });
+    const fwd = fwdOf(me);
+    let hit = 0;
+    for (const r of othersOf(me)) {
+      const d = r.pos.clone().sub(me.pos).setY(0);
+      if (d.length() < 16 && d.dot(fwd) < 1 && spinOut(r, 'Flash!', me)) hit++;
+    }
+    if (!hit) say(me, 'Say cheese!');
   },
 };
+
+function useItem(me, it) {
+  if (near(me)) sfx(it === 'power' ? me.power : it);
+  if (it === 'power') POWERS[me.power](me);
+  else BASICS[it](me);
+}
 
 // Use the item in hand; the spare moves up into its place.
 function usePower() {
@@ -2690,10 +2730,49 @@ function usePower() {
   if (!it || player.rollT > 0 || state !== 'race') return;
   player.item = player.spare;
   player.spare = null;
-  sfx(itemName(it));
-  if (it === 'power') POWERS[player.power]();
-  else BASICS[it]();
+  useItem(player, it);
 }
+
+// Rivals get items from snacks too (one at a time, no spare), and use them
+// when it makes sense: a peel or cake with someone close behind, a cherry or
+// ball with someone ahead in their lane, the pepper on a clear stretch, and
+// their power when it would catch someone. They think it over twice a
+// second, and wait a few seconds between items, longer on the easy tracks.
+const RIVAL_WAIT = { easy: 7, hard: 4 };
+function rivalItems(dt) {
+  if (!drivesRivals() || state !== 'race') return;
+  for (const r of rivals) {
+    r.itemCd = Math.max(0, r.itemCd - dt);
+    r.think -= dt;
+    if (!r.item || r.itemCd > 0 || r.think > 0 || r.spin > 0 || r.sunk > 0) continue;
+    r.think = 0.5;
+    r.held += 0.5;
+    if (!wantsTo(r, r.item) && r.held < 10) continue;
+    const it = r.item;
+    r.item = null;
+    r.itemCd = track.hard ? RIVAL_WAIT.hard : RIVAL_WAIT.easy;
+    useItem(r, it);
+  }
+}
+function wantsTo(r, it) {
+  const ahead = nextAhead(r, 30), close = nextAhead(r, 12);
+  const inLane = ahead && Math.abs(placeOnRoad(ahead.r).lat - r.lat) < 2.2;
+  const name = it === 'power' ? r.power : it;
+  switch (name) {
+    case 'Banana Peel': case 'Instant Cake': return nextBehind(r, 15);
+    case 'Cherry': return inLane;
+    case 'Sports Ball': return !!ahead;
+    case 'Hot Pepper': case 'Speed Eating': case 'Brave Mode': return r.held > 1.5;
+    case 'Gaming Knockout': return othersOf(r).some((o) => o.pos.distanceTo(r.pos) < 10);
+    case 'Math Defeater': case 'Instant Hacking': return !!nextAhead(r, 50);
+    case 'Mind Access': return !!close || !!ahead;
+    case 'Fashion Shoot': return nextBehind(r, 12);
+    default: return true;
+  }
+}
+
+// Who decides what an item hits: its owner's iPad, and the host for rivals.
+const owns = (o) => o === player || (rivals.includes(o) && drivesRivals());
 
 function updateEffects(dt, t) {
   for (let k = rings.length - 1; k >= 0; k--) {
@@ -2712,7 +2791,7 @@ function updateEffects(dt, t) {
       if (p.life <= 0) p.m.visible = false;
     }
   }
-  for (const r of [player, ...friends]) {             // sugar rush and brave sparkles
+  for (const r of RACERS) {                           // sugar rush and brave sparkles
     const behind = r.pos.clone().setY(0.4).addScaledVector(fwdOf(r), -1.2);
     if (r.rush > 0 && Math.random() < dt * 20) puff(behind, r.color, 0.4);
     if (r.brave > 0 && Math.random() < dt * 24) puff(behind.setY(0.4 + Math.random()), r.color, 0.5);
@@ -2742,9 +2821,9 @@ function updateEffects(dt, t) {
     if (b.cherry) b.m.rotation.y += dt * 14;
     else b.m.rotation.x += dt * 20;
     let hit = false;
-    if (b.owner === player) {
-      for (const r of others()) {
-        if (r.pos.distanceTo(b.m.position.clone().setY(0)) < 1.8 && spinOut(r)) { hit = true; break; }
+    if (owns(b.owner)) {
+      for (const r of othersOf(b.owner)) {
+        if (r.pos.distanceTo(b.m.position.clone().setY(0)) < 1.8 && r.airY < 0.6 && spinOut(r, 'Bonk!', b.owner)) { hit = true; break; }
       }
     }
     if (hit || b.life <= 0) {
@@ -2764,9 +2843,9 @@ function updateEffects(dt, t) {
       hit = true;
       if (player.brave <= 0) { getHit('Slip!'); sfx('slip'); }
     }
-    if (!hit && c.owner === player) {
+    if (!hit && owns(c.owner)) {
       for (const r of rivals) {
-        if (r.pos.distanceTo(c.m.position) < 1.6 && spinOut(r, 'Slip!')) { hit = true; break; }
+        if (r.pos.distanceTo(c.m.position) < 1.6 && r.airY < 0.4 && spinOut(r, 'Slip!', c.owner)) { hit = true; break; }
       }
     }
     if (hit) { send({ t: 'gone', id: c.id }); puff(c.m.position.clone().setY(0.4), '#ffe14d'); }
@@ -2777,9 +2856,9 @@ function updateEffects(dt, t) {
     c.life -= dt;
     c.m.rotation.y = t * 0.8;
     let eaten = false;
-    if (c.owner === player) {
-      for (const r of others()) {
-        if (r.pos.distanceTo(c.m.position) < 1.8 && spinOut(r, 'Yum!')) { eaten = true; break; }
+    if (owns(c.owner)) {
+      for (const r of othersOf(c.owner)) {
+        if (r.pos.distanceTo(c.m.position) < 1.8 && spinOut(r, 'Yum!', c.owner)) { eaten = true; break; }
       }
     }
     if (eaten) send({ t: 'gone', id: c.id });
@@ -2801,9 +2880,9 @@ function updateEffects(dt, t) {
     b.m.rotation.y = t * 3;
     b.m.rotation.z = t * 6;
     let hit = false;
-    if (b.owner === player) {
-      for (const r of others()) {
-        if (r.pos.distanceTo(b.m.position.clone().setY(0)) < 1.8 && spinOut(r, 'Defeated!')) { hit = true; break; }
+    if (owns(b.owner)) {
+      for (const r of othersOf(b.owner)) {
+        if (r.pos.distanceTo(b.m.position.clone().setY(0)) < 1.8 && spinOut(r, 'Defeated!', b.owner)) { hit = true; break; }
       }
     }
     if (hit || b.life <= 0) {
@@ -3507,6 +3586,7 @@ function frame(now) {
   if (state !== 'title') {
     updatePlayer(dt, driving);
     updateRivals(dt, driving);
+    rivalItems(dt);
   }
   updateFriends(dt);
   if (state === 'race') {
