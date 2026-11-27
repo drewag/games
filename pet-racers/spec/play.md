@@ -15,11 +15,13 @@ The **pick screen** has two steps, one after the other:
    pet: it appears on the left, in its kart, slowly turning, under the title. The pet's
    name, kart and power sit under the cards, with **Easy driving** or **Pro: hop &
    drift** to pick the controls, and **Next ▶** to go on.
-2. **A track.** The camera rises high over the track and slowly circles it. The tracks
-   sit in one row of cards, each with a picture of the track from above (its roads,
-   forks, water and jumps, on its own ground), in three groups: **Easy** (Park,
-   Backyard, Kitchen, Yates Mill), **Harder** (Snow, Bakery, Toy Room) and **Long** (Beach, Farm,
-   Jungle), with a line about the picked one underneath. **Race!** starts, and
+2. **A track.** The mirror of the pet step: the tracks fill a panel on the left, and
+   the picked track sits in the space to its right, seen from high above as the
+   camera slowly circles it, under the title. The cards, each with a picture of the
+   track from above (its roads, forks, water and jumps, on its own ground), sit in a
+   grid with one row per group: **Easy** (Park, Backyard, Kitchen, Yates Mill),
+   **Harder** (Snow, Bakery, Toy Room) and **Long** (Beach, Farm, Jungle), with a line
+   about the picked one underneath. **Race!** starts, and
    **◀ Pets** goes back.
 
 The game remembers the last pet, track and controls picked. Each iPad picks its own

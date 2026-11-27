@@ -144,6 +144,36 @@
   #pick[data-step="pet"] .pc.on { transform: scale(1.05) rotate(0deg); border-width: 7px; box-shadow: 0 0 0 5px #ffe58a, 4px 6px 0 rgba(90, 50, 20, 0.3); }
   #pick[data-step="pet"] .pc span { font-size: 28px; }
   #title.side { left: max(var(--kartX, 25%), 300px); }    /* over the kart, clear of the home and sound buttons */
+  #title.preview { left: var(--previewX, 75%); }          /* over the track preview */
+  /* The track step: the mirror of the pet step. A panel on the left with the
+     tracks in a grid, one row per group, and the chosen track circling slowly
+     in the space to its right. */
+  :root { --tw: clamp(56px, min(calc((100dvh - 240px) / 3 - 30px), calc((52vw - 160px) / 4 - 12px)), 140px); }
+  #pick[data-step="track"] {
+    left: calc(18px + env(safe-area-inset-left)); right: auto; bottom: auto; transform: none; width: auto;
+    top: 50%; translate: 0 -50%; padding: 16px 22px 18px;
+  }
+  #pick[data-step="track"] #tracks { flex-direction: column; align-items: flex-start; gap: 14px; margin-bottom: 12px; }
+  #pick[data-step="track"] .trackSet { display: flex; align-items: center; gap: 12px; }
+  #pick[data-step="track"] .trackSet > span { width: 3.4em; text-align: right; margin: 0; font-size: 22px; }
+  #pick[data-step="track"] .trackSet > div { gap: 12px; }
+  #pick[data-step="track"] .tc { width: var(--tw); }
+  #pick[data-step="track"] .tc b { font-size: clamp(12px, calc(var(--tw) * 0.15), 20px); }
+  #pick[data-step="track"] .tc.on { transform: scale(1.06) rotate(0deg); }
+  #pick[data-step="track"] #trackInfo { max-width: calc(4 * var(--tw) + 9em); margin-left: auto; margin-right: auto; }
+  /* Phones: everything on the track step a size smaller, so it fits the height. */
+  @media (max-height: 520px) {
+    :root { --tw: clamp(40px, calc((100dvh - 205px) / 3 - 18px), 140px); }
+    /* sits at the bottom, clear of the home and sound buttons */
+    #pick[data-step="track"] { padding: 8px 14px 10px; top: auto; translate: none; bottom: calc(8px + env(safe-area-inset-bottom)); }
+    #pick[data-step="track"] #tracks { gap: 6px; margin-bottom: 4px; }
+    #pick[data-step="track"] .trackSet > span { font-size: 16px; }
+    #pick[data-step="track"] .tc { border-width: 3px; }
+    #pick[data-step="track"] .tc b { font-size: 9px; letter-spacing: -0.3px; }
+    #pick[data-step="track"] #trackInfo { font-size: 15px; margin-bottom: 6px; }
+    #pick[data-step="track"] button#backBtn, #pick[data-step="track"] button#go { font-size: 20px; padding: 2px 20px; }
+    #title.preview { font-size: 36px; }
+  }
   #modes { display: flex; justify-content: center; gap: 10px; margin: -2px 0 10px; }
   #tracks { display: flex; justify-content: center; gap: min(22px, 2vw); margin: 0 0 10px; }
   .trackSet > span { display: block; font-size: 20px; margin-bottom: 2px; }
@@ -4006,8 +4036,17 @@ function setFar(far) {
   sketchMat.uniforms.uFade.value = far / 400;
   camera.updateProjectionMatrix();
 }
+// Moves the middle of the view `px` to the right, or back with 0.
+let viewShift = 0, previewFit = 1;   // how much further back the track preview sits, to fit beside the panel
+function shiftView(px) {
+  viewShift = Math.abs(px) < 0.5 ? 0 : px;
+  const W = window.innerWidth || 1, H = window.innerHeight || 1;
+  if (viewShift) camera.setViewOffset(W, H, -viewShift, 0, W, H);
+  else if (camera.view && camera.view.enabled) camera.clearViewOffset();
+}
 function updateCamera(dt, t) {
-  setFar(state === 'title' && pickStep === 'track' ? Math.max(400, 3 * (track.reach ||= reachOf()) - 50) : 400);
+  let wantShift = 0;
+  setFar(state === 'title' && pickStep === 'track' ? Math.max(400, (3 * (track.reach ||= reachOf()) - 50) * previewFit) : 400);
   if (state === 'title') {
     const a = (ORBIT === null ? t * 0.35 : ORBIT) + player.heading;
     let wantPos, wantLook;
@@ -4015,10 +4054,17 @@ function updateCamera(dt, t) {
       // High over the whole track, slowly circling. Looking at a point a bit
       // nearer than the middle keeps the track above the pick panel.
       // Further out over the long tracks.
+      // The track sits in the space right of the pick panel: the view is
+      // shifted over to center it there, and pulled back to fit.
+      const box = $('pick').getBoundingClientRect(), W = window.innerWidth || 1;
+      const cx = box.right > 0 ? (box.right + W) / 2 : W / 2;
+      document.documentElement.style.setProperty('--previewX', `${Math.round(cx)}px`);
+      wantShift = cx - W / 2;
+      previewFit = THREE.MathUtils.clamp(W / Math.max(1, W - box.right) * 0.85, 1, 2.2);
       const b = (ORBIT === null ? t * 0.08 : ORBIT);
-      const c = trackCenter(), k = (track.reach ||= reachOf()) / 150;
-      wantPos = new V3(c.x + Math.sin(b) * 170 * k, 165 * k, c.z + Math.cos(b) * 170 * k);
-      wantLook = new V3(c.x + Math.sin(b) * 55 * k, 0, c.z + Math.cos(b) * 55 * k);
+      const c = trackCenter(), k = (track.reach ||= reachOf()) / 150 * previewFit;
+      wantPos = new V3(c.x + Math.sin(b) * 120 * k, 180 * k, c.z + Math.cos(b) * 120 * k);
+      wantLook = new V3(c.x, 0, c.z);
     } else {
       // The kart sits in the middle of the space left of the cards: look a
       // little to its right, by as much as moves it there on screen.
@@ -4036,10 +4082,12 @@ function updateCamera(dt, t) {
     const k = far ? 1 - Math.exp(-dt * 3) : 1;
     camPos.lerp(wantPos, k);
     camLook.lerp(wantLook, k);
+    shiftView(viewShift + (wantShift - viewShift) * k);
     camera.position.copy(camPos);
     camera.lookAt(camLook);
     return;
   }
+  if (viewShift) shiftView(0);
   const fwd = fwdOf(player);
   const wantPos = player.pos.clone().addScaledVector(fwd, -5).setY(2.6 + player.airY * 0.6);
   const wantLook = player.pos.clone().addScaledVector(fwd, 4).setY(1.2 + player.airY * 0.8);
@@ -4193,6 +4241,7 @@ function setPickStep(step) {
   $('pick').dataset.step = pickStep;
   $('title').textContent = pickStep === 'track' ? 'Pick a track' : 'Pet Racers';
   $('title').classList.toggle('side', pickStep === 'pet');
+  $('title').classList.toggle('preview', pickStep === 'track');
   updatePickUi();
 }
 // Easy or Pro driving. Each iPad picks its own, even in a room.
