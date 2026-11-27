@@ -1061,7 +1061,7 @@ for (const r of RACERS) {
 // built the first time it's picked and kept after that.
 // ---------------------------------------------------------------------------
 let N = 800;             // samples around the current track: 800, or more on the long ones
-const MAX_SPEED = 39;    // a kart's top speed, units a second
+const MAX_SPEED = 26;    // a kart's top speed, units a second
 const TURN = 1.7 * MAX_SPEED / 26;   // how fast steering turns the kart: keeps the turning circle as it was at 26
 let HALF = 7;            // half the road width (narrower on the harder tracks)
 let WALL = HALF + 3.5;   // where the border stops you
@@ -2538,10 +2538,10 @@ function addBall(owner, id, f, lat, latVel, kind = 'ball', pi = 0) {
   const m = mesh(cherry ? cherryGeo : ballGeo);
   m.scale.setScalar(cherry ? 1 : 0.6);
   scene.add(m);
-  balls.push({ id, owner, m, life: cherry ? 4 : 5, f, lat, latVel, speed: cherry ? 81 : 63, cherry, bounces: 0, path: BRANCHES[pi - 1] || MAIN });
+  balls.push({ id, owner, m, life: cherry ? 4 : 5, f, lat, latVel, speed: cherry ? 54 : 42, cherry, bounces: 0, path: BRANCHES[pi - 1] || MAIN });
 }
 // The Bee: flies at its target, turning toward it, over hedges and grass.
-const BEE_SPEED = 60, BEE_TURN = 4.8;
+const BEE_SPEED = 40, BEE_TURN = 3.2;
 const beeGeo = merge([
   place(paint(sphere(10, 7), (x, y, z) => (Math.floor((z + 1) * 2.5) % 2 ? '#2a2228' : '#ffcf3f')), { s: [0.45, 0.42, 0.65] }),
   place(paint(sphere(8, 5), '#ffffff'), { p: [0.42, 0.38, -0.05], r: [0, 0, -0.5], s: [0.45, 0.08, 0.3] }),
@@ -2834,7 +2834,7 @@ const latOf = (pos, i) => pos.clone().sub(TP[i]).dot(TR[i]);
 // away widens it. A longer drift builds blue, then orange, then purple sparks,
 // and letting go with sparks showing gives a boost. Holding Go while "2" is
 // up in the countdown is a rocket start; holding it from "3" stalls.
-const REVERSE = 12;
+const REVERSE = 8;
 const HOP_TIME = 0.3;
 const SPARKS = [                      // drift time needed, boost seconds
   { at: 0.8, boost: 0.6, color: '#3d9bff' },
@@ -2859,12 +2859,12 @@ function updateHop(me, dt, want, canDrive) {
     if (me.hopT === 0) { me.hopY = 0; puff(me.pos.clone().setY(0.3).addScaledVector(fwdOf(me), -1)); }
   }
   // On the ground, still holding Hop from the hop, steering: start drifting.
-  if (!me.drift && me.hopHeld && me.hopT <= 0 && Math.abs(want) > 0.3 && me.speed > 15) {
+  if (!me.drift && me.hopHeld && me.hopT <= 0 && Math.abs(want) > 0.3 && me.speed > 10) {
     me.drift = Math.sign(want);
     me.charge = 0;
   }
   if (!me.drift) { me.driftLv = 0; return; }
-  if (me.spin > 0 || me.speed < 9 || !canDrive) {       // lost it: no boost
+  if (me.spin > 0 || me.speed < 6 || !canDrive) {       // lost it: no boost
     me.drift = 0; me.driftLv = 0; me.hopHeld = false;
     return;
   }
@@ -3239,7 +3239,7 @@ function syncRacers(t, dt = 0) {
     r.body.rotation.y = r.spinAngle + r.driftYaw;
     r.body.position.y = Math.abs(Math.sin(t * 18 + r.phase)) * 0.05 * (Math.abs(r.speed) / MAX_SPEED) + r.hopY + r.airY
       - (r.sunk > 0 ? 0.9 : 0);
-    r.body.rotation.x = r.airY > 0 ? THREE.MathUtils.clamp(-r.vy * 0.02, -0.3, 0.3) : 0;   // nose up, then down
+    r.body.rotation.x = r.airY > 0 ? THREE.MathUtils.clamp(-r.vy * 0.03, -0.3, 0.3) : 0;   // nose up, then down
     r.pet.scale.setScalar(r.brave > 0 ? 1 + Math.sin(t * 20) * 0.06 : 1);
   }
   for (const r of [player, ...friends]) {
@@ -4031,7 +4031,7 @@ function updateCamera(dt, t) {
   const fwd = fwdOf(player);
   const wantPos = player.pos.clone().addScaledVector(fwd, -5).setY(2.6 + player.airY * 0.6);
   const wantLook = player.pos.clone().addScaledVector(fwd, 4).setY(1.2 + player.airY * 0.8);
-  const k = 1 - Math.exp(-dt * 7.5);
+  const k = 1 - Math.exp(-dt * 5);
   camPos.lerp(wantPos, k);
   camLook.lerp(wantLook, k);
   if (input.look && state !== 'done') {
