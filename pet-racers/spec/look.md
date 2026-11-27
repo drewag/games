@@ -30,6 +30,9 @@ Each track is a place drawn from a pet's point of view:
 | Snow | packed snow, blue dashed line, red and white curbs | snowbanks | snowy pines, snowmen, rocks, white hills, clouds | pale blue |
 | Bakery | flour-white, caramel line, pink and white curbs | donuts with pink, chocolate and vanilla frosting | cupcakes, rolling pins, cookies, jars, mugs on a wooden table | warm wall |
 | Toy Room | a toy-road rug, white dashed line, yellow and black curbs | toy blocks | block towers, balls, crayons on a striped rug | lilac wall |
+| Beach | packed sand, white dashed line, blue and white curbs; boardwalk and pier in wood | sand pails | palms, sandcastles, umbrellas and towels, starfish, beach balls, the sea along one side, sand dunes | blue pencil |
+| Farm | dirt, red and white curbs; the orchard lane lighter, the barnyard muddier | hay bales | trees, red barns, silos, hay rolls, pumpkins, sheep, sunflowers on a patchwork of fields | blue pencil |
+| Jungle | dirt, yellow and green curbs; the temple path in grey stone | bamboo | palms, vine trees, ferns, big flowers, mossy ruins, dark green hills | pale green-blue |
 
 The pets are tiny in the kitchen: the counter's things are many times their size.
 
@@ -38,13 +41,20 @@ white arrows pointing ahead), and its low sides and the nose that kicks up at th
 in the track's colors (brown on the Backyard, red and white in the Kitchen, blue and white
 on Snow, pink and cream in the Bakery, blue and yellow in the Toy Room). Taking off throws
 orange and yellow puffs, like a boost. A **hazard** fills a branch from border to border: long grass with tufts,
-or water with white ripples (blue, or syrup-brown in the Bakery). A sinking kart drops
+or water with white ripples (blue, or syrup-brown in the Bakery; yellow wheat or brown mud on the long tracks). A sinking kart drops
 below the surface in a spray of puffs. Where the road **forks**, both roads have the
 track's border along their outer edges and down the island between them, and the curbs
 stop where one road opens into the other.
 
-Where a big hill in the distance reaches over the road (on the Snow, Backyard and Park
-tracks), the road goes through it in a **tunnel**: a grey stone arch with a stone portal
+On the long tracks the ground, scenery and hills spread out to match, and the camera over
+the pick screen rises higher and sees further, with the fade to paper pushed back to suit.
+
+A track's **picture** on the pick screen is drawn, not rendered: the roads from above with
+brown outlines and the curb color, in the track's road colors, on little squares of its
+ground, with hazards in their colors, jumps as orange dots and a checkered start line.
+
+Where a big hill in the distance reaches over the road (on the Snow, Backyard, Park and
+long tracks), the road goes through it in a **tunnel**: a grey stone arch with a stone portal
 at each end, and no border inside.
 
 ## The drawn style

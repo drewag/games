@@ -7,10 +7,11 @@ loads (`balance()` in `index.html`), so redrawing a branch rebalances it.
 ## Time saved
 
     saved = (main length - branch length) / cruising speed
-            + 0.3 s for each boost pad on the branch
+            + 0.3 s for each boost pad or jump on the branch
             - 0.35 s if the main road has snacks the branch skips
 
-Cruising speed is 95% of top speed. Branches have no snacks, so skipping them costs the
+Cruising speed is 95% of top speed. A jump on a branch launches with a boost, so it counts
+like a pad. Branches have no snacks, so skipping them costs the
 chance of an item.
 
 ## Branches that come out slower: boost lanes
@@ -52,9 +53,24 @@ should skip less.
 | Bakery | top-right corner | 1 × water | 0.66 s | 0.22 | 10.7 |
 | Toy Room | bulge in the hook | 1 × water | 0.61 s | 0.20 | 10.3 |
 | Toy Room | neck of the bottom-right loop | 1 × water | 1.79 s | 0.60 | 17.5 |
+| Beach | boardwalk | 3 pads | 0.27 s | | |
+| Beach | tide pools (three-way, outside) | 1 × water | 0.59 s | 0.20 | 10.3 |
+| Beach | dunes (three-way, inside), 3 jumps | 4 pads | 0.05 s | | |
+| Beach | pier | 3 pads | 0.09 s | | |
+| Farm | orchard lane | as it is | 0.00 s | | |
+| Farm | duck pond | 2 × water | 2.57 s | 0.43 | 14.5 |
+| Farm | barnyard, 3 jumps | 2 pads | 0.17 s | | |
+| Jungle | river | 1 × water | 1.30 s | 0.43 | 14.5 |
+| Jungle | temple path, 2 jumps | 3 pads | 0.03 s | | |
+| Jungle | mud | 1 × rough | 0.79 s | 0.50 | 15.7 |
 
 Tried in the game: the 0.20 gap is cleared from 70% speed but not 55%; the 0.60 gap from
 85% but not 70%.
+
+The long tracks' forks were drawn to come out close to even before any pads (see the
+orchard lane), so most of them are other ways round rather than shortcuts or long detours.
+On a long track, forks and main-road jumps are placed by a point near the main road rather
+than a sample number, since a longer loop has more samples (about one per 1.75 units).
 
 The first Toy Room shortcuts cut across whole hooks and saved 3.5 to 6.4 s, more than
 the water that fits on a short branch can balance, so they became the smaller cuts above.

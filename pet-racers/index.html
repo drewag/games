@@ -95,18 +95,28 @@
   .pc img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
   #pickInfo { font-size: 24px; margin-bottom: 10px; }
   #modes { display: flex; justify-content: center; gap: 10px; margin: -2px 0 10px; }
-  .trackRow { display: flex; justify-content: center; align-items: center; gap: 12px; margin: 4px 0 10px; }
-  .trackRow span { font-size: 20px; width: 70px; text-align: right; }
+  #tracks { display: flex; justify-content: center; gap: min(22px, 2vw); margin: 0 0 10px; }
+  .trackSet > span { display: block; font-size: 20px; margin-bottom: 2px; }
+  .trackSet > div { display: flex; gap: min(8px, 0.8vw); }
+  .tc {
+    font: inherit; color: var(--ink); padding: 0; cursor: pointer; width: min(88px, 8.4vw);
+    background: var(--paper); border: 4px solid var(--ink); border-radius: 6px; overflow: hidden; opacity: 0.7;
+    transition: transform 0.15s, opacity 0.15s; box-shadow: 3px 4px 0 rgba(90, 50, 20, 0.25);
+  }
+  .tc:nth-child(odd) { transform: rotate(-2deg); }
+  .tc:nth-child(even) { transform: rotate(2deg); }
+  .tc canvas { display: block; width: 100%; height: auto; aspect-ratio: 1; border-bottom: 3px solid var(--ink); pointer-events: none; }
+  .tc b { display: block; font-weight: normal; font-size: min(17px, 1.7vw); padding: 1px 0 2px; white-space: nowrap; }
+  .tc.on { opacity: 1; background: #ffe58a; transform: translateY(-10px) scale(1.06) rotate(0deg); border-width: 5px; }
   #trackInfo { font-size: 22px; margin: 0 0 12px; min-height: 1.2em; }
   #pick[data-step="pet"] .track-step, #pick[data-step="track"] .pet-step { display: none; }
-  #tracks button, #modes button {
+  #modes button {
     font: inherit; font-size: 22px; color: var(--ink); padding: 2px 18px; cursor: pointer;
     background: var(--paper); border: 3px solid var(--ink); border-radius: 18px 6px 18px 6px / 6px 18px 6px 18px;
     opacity: 0.6;
   }
   #modes button { font-size: 18px; padding: 0 14px; }
-  #tracks button { font-size: 30px; padding: 4px 22px; }
-  #tracks button.on, #modes button.on { background: #ffe58a; opacity: 1; }
+  #modes button.on { background: #ffe58a; opacity: 1; }
   #tracks.locked button { pointer-events: none; }
   #pickName { font-size: 32px; font-weight: normal; margin-right: 8px; }
   #card {
@@ -310,6 +320,7 @@ const sketchMat = new THREE.ShaderMaterial({
     uLight: { value: LIGHT },
     uBoil: { value: new THREE.Vector2() },
     uPaper: { value: new THREE.Color(PAPER) },
+    uFade: { value: 1 },             // stretches the fade to paper when the camera sees further
   },
   vertexShader: /* glsl */`
     varying vec3 vColor; varying vec3 vN; varying vec3 vW; varying float vDist;
@@ -323,7 +334,7 @@ const sketchMat = new THREE.ShaderMaterial({
       gl_Position = projectionMatrix * mv;
     }`,
   fragmentShader: /* glsl */`
-    uniform sampler2D uStrokes; uniform vec3 uLight; uniform vec2 uBoil; uniform vec3 uPaper;
+    uniform sampler2D uStrokes; uniform vec3 uLight; uniform vec2 uBoil; uniform vec3 uPaper; uniform float uFade;
     varying vec3 vColor; varying vec3 vN; varying vec3 vW; varying float vDist;
     void main() {
       vec3 n = normalize(vN);
@@ -337,7 +348,7 @@ const sketchMat = new THREE.ShaderMaterial({
       if (ndl < -0.3) c *= 0.88 * (1.0 - 0.30 * s.b);
       c *= 1.0 - 0.10 * s.r;
       c = mix(c, uPaper, 0.12 * s.r);                // colored pencil doesn't fill every gap
-      c = mix(c, uPaper, smoothstep(90.0, 330.0, vDist));
+      c = mix(c, uPaper, smoothstep(90.0 * uFade, 330.0 * uFade, vDist));
       gl_FragColor = vec4(c, 1.0);
     }`,
 });
@@ -421,7 +432,7 @@ const compMat = new THREE.ShaderMaterial({
       float e = max(max(smoothstep(0.08, 0.2, dEdge), smoothstep(0.3, 0.55, nEdge)),
                     smoothstep(0.07, 0.13, cEdge) * 0.9);
       e *= 0.7 + 0.45 * vnoise(fc * 0.04 + uBoil * 3.3);          // marker pressure
-      e *= 1.0 - 0.75 * smoothstep(110.0, 240.0, 1.0 / zC);         // lighter lines far away
+      e *= 1.0 - 0.75 * smoothstep(110.0 * uFar / 400.0, 240.0 * uFar / 400.0, 1.0 / zC);   // lighter lines far away
 
       vec3 col = texture2D(tColor, vUv).rgb;
       if (texture2D(tDepth, vUv).x > 0.9999999) {                    // sky: pencil scribbles
@@ -981,7 +992,7 @@ for (const r of RACERS) {
 // curbs, what lines the road, the ground, the scenery and the sky. A track is
 // built the first time it's picked and kept after that.
 // ---------------------------------------------------------------------------
-const N = 800;           // samples around every track
+let N = 800;             // samples around the current track: 800, or more on the long ones
 const MAX_SPEED = 26;    // a kart's top speed, units a second
 let HALF = 7;            // half the road width (narrower on the harder tracks)
 let WALL = HALF + 3.5;   // where the border stops you
@@ -991,6 +1002,7 @@ let track = null;
 
 function setCurve(ctrl) {
   const curve = new THREE.CatmullRomCurve3(ctrl.map(([x, z]) => new V3(x, 0, z)), true, 'centripetal');
+  N = Math.max(800, Math.round(curve.getLength() / 1.75));       // no sparser than the Toy Room's
   TP = curve.getSpacedPoints(N); TP.pop();
   TL = curve.getLength();
   TT = TP.map((p, i) => TP[(i + 1) % N].clone().sub(TP[(i - 1 + N) % N]).normalize());
@@ -1012,6 +1024,14 @@ function headingAt(f) {
 
 const angleTo = (from, to) => { const d = to - from; return Math.atan2(Math.sin(d), Math.cos(d)); };
 
+// A spot on the main loop: a sample number, or the sample nearest a point [x, z].
+function sampleAt(v) {
+  if (typeof v === 'number') return v;
+  let best = 0, d = Infinity;
+  for (let i = 0; i < N; i++) { const e = (TP[i].x - v[0]) ** 2 + (TP[i].z - v[1]) ** 2; if (e < d) { d = e; best = i; } }
+  return best;
+}
+
 // Paths: the main loop, plus branches that leave it and join it again
 // further on. A branch is a road of its own, sampled about once per unit;
 // `from` and `to` are the main-loop samples where it leaves and rejoins.
@@ -1021,7 +1041,7 @@ let BRANCHES = [];            // the current track's branches
 let RAMPS = [];               // the current track's jumps: { path, f } where the ramp starts
 
 function makeBranch(b) {
-  const from = wrap(b.from), to = wrap(b.to);
+  const from = wrap(sampleAt(b.from)), to = wrap(sampleAt(b.to));
   const pts = [TP[wrap(from - 14)], TP[from], ...b.via.map(([x, z]) => new V3(x, 0, z)), TP[to], TP[wrap(to + 14)]];
   const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
   const dense = curve.getSpacedPoints(Math.round(curve.getLength()));
@@ -1039,6 +1059,7 @@ function makeBranch(b) {
   return {
     P, T, R: T.map((t) => new V3(-t.z, 0, t.x)), n, len, half: b.half || HALF, from, to, span: wrap(to - from),
     take: b.take ?? 0.45, hazard: b.hazard || null, padAt: b.pads || [], gaps: [], saved: 0,
+    road: b.road || null, jumpAt: b.jumps || [],
   };
 }
 
@@ -1046,7 +1067,7 @@ function makeBranch(b) {
 // neither road is quicker, and the better driver gains by picking well.
 //
 //   saved = (main length - branch length) / cruising speed
-//           + PAD_GAIN for each boost pad on the branch
+//           + PAD_GAIN for each boost pad or jump on the branch
 //           - SNACK_COST if the main road has snacks the branch skips
 //
 // A branch that comes out slower (saved < 0) is a boost lane: it gets enough
@@ -1068,14 +1089,15 @@ const HAZARD_COST = { rough: 1.6, water: 3 };       // seconds a botched jump co
 const SNACK_COST = 0.35, PAD_GAIN = 0.3, MAX_RISK = 0.75;
 function balance(br) {
   const cruise = MAX_SPEED * 0.95;
-  const skipsSnacks = snacks.some((p) => wrap(p.f - br.from) < br.span);
-  const savedBy = () => ((br.span / N) * TL - br.len) / cruise + br.padAt.length * PAD_GAIN - (skipsSnacks ? SNACK_COST : 0);
+  const skipsSnacks = snacks.some((p) => !p.off && wrap(p.f - br.from) < br.span);
+  const savedBy = () => ((br.span / N) * TL - br.len) / cruise + (br.padAt.length + br.jumpAt.length) * PAD_GAIN - (skipsSnacks ? SNACK_COST : 0);
   br.saved = savedBy();
   br.gaps = [];
   if (br.saved < 0) {                                      // a boost lane
     const add = Math.ceil(-br.saved / PAD_GAIN);
     const all = br.padAt.length + add;
-    br.padAt = [...Array(all)].map((_, k) => 0.15 + (0.7 * (k + 0.5)) / all);
+    br.padAt = [...Array(all)].map((_, k) => 0.15 + (0.7 * (k + 0.5)) / all)
+      .map((a) => (br.jumpAt.some(([j]) => Math.abs(a - j) < 0.05) ? a + 0.07 : a));   // not on a jump
     br.saved = savedBy();
     return;
   }
@@ -1316,6 +1338,118 @@ function crayon(parts, r, x, z) {
   parts.push(place(paint(new THREE.ConeGeometry(0.6, 1.4, 8), c), { p: [x + Math.cos(a) * 3.7, 0.6, z - Math.sin(a) * 3.7], r: [0, a, -Math.PI / 2] }));
 }
 
+// The beach
+function palm(parts, r, x, z) {
+  const h = 6 + r() * 3, lean = (r() - 0.5) * 0.5, a = r() * 6;
+  const dx = Math.cos(a) * lean, dz = Math.sin(a) * lean;          // a gently leaning trunk
+  for (let k = 0; k < 4; k++) {
+    parts.push(place(paint(new THREE.CylinderGeometry(0.32, 0.42, h / 4 + 0.2, 7), k % 2 ? '#a8774a' : '#94653c'),
+      { p: [x + dx * h * (k + 0.5) / 4, h * (k + 0.5) / 4, z + dz * h * (k + 0.5) / 4] }));
+  }
+  const tx = x + dx * h, tz = z + dz * h;
+  for (let k = 0; k < 6; k++) {
+    const b = (k / 6) * Math.PI * 2 + r() * 0.3;
+    parts.push(place(paint(sphere(8, 5), k % 2 ? '#3f9a3a' : '#56b048'),
+      { p: [tx + Math.sin(b) * 2, h - 0.3, tz + Math.cos(b) * 2], r: [0, b, 0.35], s: [0.6, 0.2, 2.6] }));
+  }
+  for (let k = 0; k < 3; k++) {
+    parts.push(place(paint(sphere(6, 4), '#6b3a1e'), { p: [tx + Math.sin(k * 2) * 0.5, h - 0.6, tz + Math.cos(k * 2) * 0.5], s: [0.45, 0.45, 0.45] }));
+  }
+}
+function sandcastle(parts, r, x, z) {
+  const s = 1.2 + r() * 0.8, sand = '#e6c67f';
+  parts.push(place(paint(box(), sand), { p: [x, 1 * s, z], s: [5 * s, 2 * s, 5 * s] }));
+  for (const [ox, oz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    const px = x + ox * 2.4 * s, pz = z + oz * 2.4 * s;
+    parts.push(place(paint(new THREE.CylinderGeometry(0.9 * s, 1 * s, 3.4 * s, 10), sand), { p: [px, 1.7 * s, pz] }));
+    parts.push(place(paint(new THREE.ConeGeometry(1 * s, 1.4 * s, 10), '#d9b264'), { p: [px, 4.1 * s, pz] }));
+  }
+  parts.push(place(paint(new THREE.CylinderGeometry(0.06, 0.06, 2 * s, 4), '#6b3a1e'), { p: [x, 3 * s, z] }));
+  parts.push(place(paint(box(), pick1(r, ['#e2483b', '#3b9fd8', '#ffcf3f'])), { p: [x + 0.5 * s, 3.6 * s, z], s: [1 * s, 0.6 * s, 0.08] }));
+}
+function umbrella(parts, r, x, z) {
+  const c = pick1(r, ['#e2483b', '#3b9fd8', '#ff7eb6', '#ffcf3f']);
+  parts.push(place(paint(new THREE.CylinderGeometry(0.12, 0.12, 5, 5), '#fffdf6'), { p: [x, 2.5, z], r: [0.15, 0, 0.1] }));
+  parts.push(place(paint(new THREE.ConeGeometry(3.6, 1.6, 12, 1, true), (px, py, pz) =>
+    (Math.floor((Math.atan2(px, pz) + Math.PI) * 6 / Math.PI) % 2 ? c : '#fffdf6')), { p: [x + 0.4, 5.2, z + 0.7], r: [0.15, 0, 0.1] }));
+  parts.push(place(paint(box(), pick1(r, ['#7ec8e3', '#ff9ec4', '#ffe58a'])), { p: [x + 2, 0.06, z - 1.5], r: [0, r() * 3, 0], s: [2.2, 0.12, 4] }));   // a towel
+}
+function starfish(parts, r, x, z) {
+  const c = pick1(r, ['#f08a24', '#e2483b', '#ff7eb6']), a = r() * 6;
+  for (let k = 0; k < 5; k++) {
+    const b = a + (k / 5) * Math.PI * 2;
+    parts.push(place(paint(sphere(6, 4), c), { p: [x + Math.sin(b) * 0.9, 0.2, z + Math.cos(b) * 0.9], r: [0, b, 0], s: [0.35, 0.2, 1.1] }));
+  }
+}
+// The farm
+function barn(parts, r, x, z) {
+  const a = Math.floor(r() * 4) * (Math.PI / 2) + (r() - 0.5) * 0.4;
+  parts.push(place(paint(box(), '#c0392b'), { p: [x, 5, z], r: [0, a, 0], s: [14, 10, 18] }));
+  parts.push(place(paint(new THREE.CylinderGeometry(8.6, 8.6, 18.6, 3), '#6b3a1e'), { p: [x, 12.2, z], r: [Math.PI / 2, a, Math.PI / 2], s: [1, 1, 0.5] }));
+  const fx = x + Math.sin(a) * 9.05, fz = z + Math.cos(a) * 9.05;              // big white-X doors on the front
+  parts.push(place(paint(box(), '#fffdf6'), { p: [fx, 3.5, fz], r: [0, a, 0], s: [6, 7, 0.2] }));
+  for (const t of [-0.85, 0.85]) parts.push(place(paint(box(), '#c0392b'), { p: [fx, 3.5, fz], r: [0, a, t, 'YXZ'], s: [0.7, 8.6, 0.25] }));
+}
+function silo(parts, r, x, z) {
+  const h = 14 + r() * 6;
+  parts.push(place(paint(new THREE.CylinderGeometry(3.2, 3.2, h, 14), (px, py) => (Math.floor(py / 2.5) % 2 ? '#cfd6dc' : '#b9c1c8')), { p: [x, h / 2, z] }));
+  parts.push(place(paint(sphere(14, 8), '#e2483b'), { p: [x, h, z], s: [3.3, 2.6, 3.3] }));
+}
+function hayRoll(parts, r, x, z) {
+  const a = r() * Math.PI;
+  parts.push(place(paint(new THREE.CylinderGeometry(1.8, 1.8, 2.4, 14), (px, py, pz) => (Math.abs(py) > 1.15 ? '#d9b04a' : '#e8c55a')),
+    { p: [x, 1.8, z], r: [0, a, Math.PI / 2] }));
+}
+function pumpkin(parts, r, x, z) {
+  const s = 0.9 + r() * 0.8;
+  parts.push(place(paint(sphere(12, 8), (px, py, pz) => (Math.floor((Math.atan2(px, pz) + Math.PI) * 8 / Math.PI) % 2 ? '#f08a24' : '#e07b1a')),
+    { p: [x, 0.9 * s, z], s: [1.3 * s, 1 * s, 1.3 * s] }));
+  parts.push(place(paint(new THREE.CylinderGeometry(0.15, 0.2, 0.6, 5), '#4f7a2a'), { p: [x, 2 * s, z] }));
+}
+function sheep(parts, r, x, z) {
+  const a = r() * 6, fx = Math.sin(a), fz = Math.cos(a);
+  parts.push(place(paint(sphere(10, 7), '#fbfdff'), { p: [x, 1.6, z], r: [0, a, 0], s: [1.4, 1.1, 1.9] }));
+  parts.push(place(paint(sphere(8, 6), '#2a2228'), { p: [x + fx * 1.9, 1.9, z + fz * 1.9], r: [0, a, 0], s: [0.6, 0.65, 0.75] }));
+  for (const [ox, oz] of [[-0.6, -0.9], [0.6, -0.9], [-0.6, 0.9], [0.6, 0.9]]) {
+    parts.push(place(paint(new THREE.CylinderGeometry(0.15, 0.15, 1, 5), '#2a2228'),
+      { p: [x + Math.cos(a) * ox + fx * oz, 0.5, z - Math.sin(a) * ox + fz * oz] }));
+  }
+}
+// The jungle
+function fern(parts, r, x, z) {
+  const c = pick1(r, ['#2f8a3a', '#3f9a3a', '#4fa84a']);
+  for (let k = 0; k < 7; k++) {
+    const b = (k / 7) * Math.PI * 2 + r() * 0.4;
+    parts.push(place(paint(sphere(7, 4), c), { p: [x + Math.sin(b) * 1.4, 0.9, z + Math.cos(b) * 1.4], r: [0, b, 0.5], s: [0.5, 0.2, 2] }));
+  }
+}
+function jungleFlower(parts, r, x, z) {
+  const c = pick1(r, ['#e2483b', '#ff7eb6', '#ffcf3f', '#a58ad8']), h = 1.5 + r() * 1.5;
+  parts.push(place(paint(new THREE.CylinderGeometry(0.15, 0.2, h, 5), '#3f8a2a'), { p: [x, h / 2, z] }));
+  for (let k = 0; k < 5; k++) {
+    const b = (k / 5) * Math.PI * 2;
+    parts.push(place(paint(sphere(6, 4), c), { p: [x + Math.sin(b) * 0.7, h, z + Math.cos(b) * 0.7], r: [0, b, 0], s: [0.5, 0.18, 0.9] }));
+  }
+  parts.push(place(paint(sphere(6, 4), '#ffcf3f'), { p: [x, h + 0.1, z], s: [0.35, 0.3, 0.35] }));
+}
+function ruin(parts, r, x, z) {
+  const a = r() * 6, n = 2 + Math.floor(r() * 3);
+  for (let k = 0; k < n; k++) {
+    parts.push(place(paint(box(), k % 2 ? '#a39a8f' : '#b3aa9f'), { p: [x + (r() - 0.5) * 0.5, 1.5 + k * 3, z + (r() - 0.5) * 0.5], r: [0, a + (r() - 0.5) * 0.3, 0], s: [3.2, 3, 3.2] }));
+  }
+  parts.push(place(paint(sphere(8, 5), '#4f8a3a'), { p: [x, n * 3, z], s: [2, 0.7, 2] }));            // moss on top
+  parts.push(place(paint(box(), '#b3aa9f'), { p: [x + 3, 0.5, z + 1], r: [0.3, a, 0.2], s: [2.4, 1, 1.8] }));  // a fallen block
+}
+function vineTree(parts, r, x, z) {
+  const h = 8 + r() * 4, s = 3.5 + r() * 1.5;
+  parts.push(place(paint(new THREE.CylinderGeometry(0.6, 0.9, h, 8), '#7a4a2a'), { p: [x, h / 2, z] }));
+  parts.push(place(paint(sphere(10, 7), pick1(r, ['#2f7a3a', '#3f8a3a'])), { p: [x, h + s * 0.4, z], s: [s * 1.3, s * 0.8, s * 1.3] }));
+  for (let k = 0; k < 3; k++) {
+    const b = r() * 6, d = s * 0.9;
+    parts.push(place(paint(new THREE.CylinderGeometry(0.08, 0.08, h * 0.5, 4), '#4f9a3a'), { p: [x + Math.sin(b) * d, h * 0.8, z + Math.cos(b) * d] }));
+  }
+}
+
 // What lines each side of the road, one piece every few steps.
 const BORDERS = {
   hedge: (parts, r, p) => {
@@ -1337,6 +1471,21 @@ const BORDERS = {
   },
   block: (parts, r, p, i, a) => {
     parts.push(place(paint(box(), TOY_COLORS[Math.floor(i / 2) % 4]), { p: [p.x, 0.9, p.z], r: [0, a, 0], s: [1.8, 1.8, 1.8] }));
+  },
+  pail: (parts, r, p, i) => {
+    const c = ['#e2483b', '#3b9fd8', '#ffcf3f', '#4caf50'][Math.floor(i / 2) % 4];
+    parts.push(place(paint(new THREE.CylinderGeometry(0.85, 0.65, 1.4, 10), c), { p: [p.x, 0.7, p.z] }));
+    parts.push(place(paint(new THREE.TorusGeometry(0.75, 0.06, 4, 10, Math.PI), '#fffdf6'), { p: [p.x, 1.4, p.z], r: [0, i, 0] }));
+  },
+  hay: (parts, r, p, i, a) => {
+    parts.push(place(paint(box(), Math.floor(i / 2) % 2 ? '#e8c55a' : '#ddb64a'), { p: [p.x, 0.75, p.z], r: [0, a, 0], s: [1.6, 1.5, 2.4] }));
+  },
+  bamboo: (parts, r, p, i) => {
+    for (let k = 0; k < 2; k++) {
+      const h = 2.2 + r() * 1.6, x = p.x + (r() - 0.5) * 1.2, z = p.z + (r() - 0.5) * 1.2;
+      parts.push(place(paint(new THREE.CylinderGeometry(0.22, 0.24, h, 6), (px, py) => (Math.abs(((py + h) % 1.1) - 0.55) < 0.08 ? '#4f8a2a' : '#7cbf4a')),
+        { p: [x, h / 2, z] }));
+    }
   },
   marshmallow: (parts, r, p, i) => {
     parts.push(place(paint(new THREE.CylinderGeometry(0.9, 0.9, 1.6, 12), Math.floor(i / 3) % 2 ? '#ffd6e5' : '#fffdf6'),
@@ -1439,6 +1588,78 @@ const TRACKS = [
     ],
     jumps: [[28, -0.4]], ramp: ['#3b7dd8', '#ffcf3f'], water: '#5b9bd5',
   },
+  // The long tracks: about twice round, with forks that are whole other roads,
+  // not just short cuts. Forks are placed by points near the main road, since
+  // a long track has more samples.
+  {
+    name: 'Beach', blurb: 'Along the sand, down the boardwalk or out on the pier', long: true, half: 6.5, offroad: 0.5, rivals: 1.01,
+    ctrl: [[-48, 180], [48, 190], [132, 174], [204, 192], [270, 156], [294, 84], [246, 42], [282, -12], [288, -96], [240, -168],
+      [156, -186], [96, -144], [24, -180], [-60, -198], [-144, -180], [-204, -210], [-270, -168], [-276, -84], [-216, -48],
+      [-144, -72], [-96, -24], [-132, 36], [-216, 48], [-270, 102], [-210, 126], [-234, 174], [-144, 192]],
+    road: '#d7b98a', line: '#fffdf6', curbs: ['#3b9fd8', '#fffdf6'], border: 'pail', borderStep: 3,
+    ground: (x, y) => {
+      const shore = 220 + Math.sin(x * 0.03) * 6;                            // the sea along the bottom
+      if (-y > shore + 7) return '#6fbde0';
+      if (-y > shore) return '#fffdf6';
+      return Math.sin(x * 0.08 + y * 0.05) + Math.sin(x * 0.03 - y * 0.06) > 1.1 ? '#efdcaa' : '#f6e7bd';
+    },
+    sky: [0.55, 0.78, 0.95], hills: ['#f1dca4', '#e6cd8c'], clouds: true,
+    props: [[0.34, palm], [0.12, sandcastle], [0.16, umbrella], [0.2, starfish], [0.1, toyBall], [0.08, rock]], count: 420,
+    // A boardwalk inland (a little longer, so boost pads), a three-way fork at
+    // the top (over the tide pools, the middle, or over the dunes), and a pier
+    // out over the sea.
+    branches: [
+      { from: [132, 174], to: [282, -12], via: [[160, 125], [92, 82], [140, 30], [215, 25]], road: '#b98552' },
+      { from: [156, -186], to: [-60, -198], via: [[60, -204]], half: 5.5, hazard: 'water', take: 0.33 },
+      { from: [156, -186], to: [-60, -198], via: [[110, -112], [40, -128]], half: 5.5, take: 0.5,
+        jumps: [[0.3, 0], [0.5, 0.45], [0.7, -0.45]] },
+      { from: [-270, 102], to: [-144, 192], via: [[-290, 150], [-250, 200]], half: 5, road: '#b98552' },
+    ],
+    jumps: [[[48, 190], 0.45]], ramp: ['#3b9fd8', '#fffdf6'], water: '#4fb0d8', padCount: 6, snackRows: 16,
+  },
+  {
+    name: 'Farm', blurb: 'Through the orchard, past the duck pond and the barnyard', long: true, half: 6.5, offroad: 0.5, rivals: 1.01,
+    ctrl: [[-250, 60], [-255, -40], [-230, -130], [-170, -185], [-90, -190], [-40, -150], [-60, -90], [-20, -50], [50, -70],
+      [80, -130], [150, -180], [230, -170], [270, -110], [250, -40], [190, -10], [200, 50], [260, 90], [250, 170], [170, 200],
+      [100, 160], [40, 190], [-30, 200], [-90, 160], [-60, 100], [-110, 60], [-170, 120], [-230, 130]],
+    road: '#b48a5e', line: null, curbs: ['#e2483b', '#fffdf6'], border: 'hay', borderStep: 2,
+    ground: (x, y) => {                                                       // a patchwork of fields
+      const fx = Math.floor((x + Math.sin(y * 0.02) * 12) / 70), fy = Math.floor((y + Math.sin(x * 0.02) * 12) / 70);
+      return ['#8cc34a', '#a2cc58', '#d8c36a', '#97c552', '#b8d46a'][((fx * 7 + fy * 13) % 5 + 5) % 5];
+    },
+    sky: [0.55, 0.74, 0.92], hills: ['#a7d672', '#93c95f'], clouds: true,
+    props: [[0.24, tree], [0.06, barn], [0.05, silo], [0.17, hayRoll], [0.16, pumpkin], [0.16, sheep], [0.16, sunflower]], count: 360,
+    // A long winding lane through the orchard, a cut across the duck pond,
+    // and a bumpy road round the barnyard with jumps.
+    branches: [
+      { from: [-254, 0], to: [-20, -50], via: [[-215, -85], [-170, -115], [-128, -74], [-176, -14], [-115, 15], [-70, -25]], road: '#c9a274' },
+      { from: [270, -110], to: [260, 90], via: [[290, -20]], half: 5, hazard: 'water' },
+      { from: [250, 170], to: [-30, 200], via: [[190, 238], [100, 225], [5, 238]], road: '#9a7048',
+        jumps: [[0.3, 0], [0.55, -0.45], [0.8, 0.45]] },
+    ],
+    jumps: [[[190, -178], -0.45]], ramp: ['#e2483b', '#fffdf6'], water: '#6fb3d6', rough: '#d8b847', tuft: '#f0d35a',
+    padCount: 6, snackRows: 16,
+  },
+  {
+    name: 'Jungle', blurb: 'Over the river, through the temple, or through the mud', long: true, half: 6.5, offroad: 0.5, rivals: 1.01,
+    ctrl: [[-170, 195], [-85, 205], [0, 188], [85, 205], [170, 190], [223, 135], [189, 85], [119, 95], [51, 25], [-17, 15],
+      [-85, 50], [-153, 72], [-197, 22], [-170, -28], [-93, -18], [0, -40], [94, -18], [183, -40], [223, -100], [194, -160],
+      [111, -178], [17, -128], [-68, -180], [-161, -172], [-228, -120], [-251, -20], [-248, 100], [-225, 170]],
+    road: '#b0855a', line: null, curbs: ['#ffcf3f', '#4f9a3a'], border: 'bamboo', borderStep: 2,
+    ground: (x, y) => (Math.sin(x * 0.06) * Math.cos(y * 0.05) + Math.sin(x * 0.13 + y * 0.09) * 0.5 > 0.5 ? '#4f9a3a' : '#5aa844'),
+    sky: [0.62, 0.82, 0.86], hills: ['#4f8f3a', '#3f7a30'], clouds: true,
+    props: [[0.24, palm], [0.2, vineTree], [0.22, fern], [0.16, jungleFlower], [0.1, ruin], [0.08, rock]], count: 380,
+    // Straight across the river with a jump, the long way round through the
+    // temple ruins on a narrow stone path, and a cut through the mud.
+    branches: [
+      { from: [119, 95], to: [-153, 72], via: [[60, 102], [-20, 100], [-100, 92]], half: 5.5, hazard: 'water' },
+      { from: [-170, -28], to: [183, -40], via: [[-110, -74], [-50, -88], [10, -66], [70, -85], [130, -74]], half: 5, road: '#a39a8f',
+        jumps: [[0.3, 0.4], [0.7, -0.4]] },
+      { from: [130, -176], to: [-75, -182], via: [[60, -192], [-5, -195]], half: 5, hazard: 'rough' },
+    ],
+    jumps: [[[40, 197], 0.45]], ramp: ['#ffcf3f', '#4f9a3a'], water: '#3f9fc4', rough: '#7a5532', tuft: '#5e3f22',
+    padCount: 6, snackRows: 16,
+  },
 ];
 
 // Drops the triangles whose centre fails `keep(x, y, z)`.
@@ -1515,15 +1736,15 @@ function tunnels(parts, hills) {
   return inTunnel;
 }
 
-// Boost pads go where the road runs straightest: four per track, spread out,
-// swapping between the middle and the sides.
+// Boost pads go where the road runs straightest: four per track (more on the
+// long ones), spread out, swapping between the middle and the sides.
 const PAD_LEN = 6, PAD_W = 4.4;
-function findPads() {
+function findPads(count = 4) {
   const turn = [...Array(N)].map((_, i) => Math.abs(angleTo(headingAt(i - 20), headingAt(i + 20))));
   const order = [...Array(N).keys()].filter((i) => i > 40 && i < N - 20).sort((a, b) => turn[a] - turn[b]);
-  const pads = [], lats = [0, -0.45, 0.45], apart = N / 6;
+  const pads = [], lats = [0, -0.45, 0.45], apart = N / (count + 2);
   for (const f of order) {
-    if (pads.length === 4 || turn[f] > 0.35) break;
+    if (pads.length === count || turn[f] > 0.35) break;
     if (pads.some((p) => Math.min(wrap(f - p.f), wrap(p.f - f)) < apart)) continue;
     pads.push({ path: MAIN, f, lat: 0 });
   }
@@ -1531,10 +1752,15 @@ function findPads() {
   return pads;
 }
 
+const reachOf = () => Math.max(150, ...TP.map((p) => Math.max(Math.abs(p.x), Math.abs(p.z))));
+
 function buildTrack(def) {
   const parts = [];
   const r = rng(def.name.length * 97 + 12);
-  parts.push(place(paint(new THREE.PlaneGeometry(700, 700, 70, 70), def.ground), { r: [-Math.PI / 2, 0, 0] }));
+  // How far the track reaches from the middle of the world; the ground, the
+  // scenery and the hills spread out to match on the long tracks.
+  const R = reachOf(), size = Math.max(700, 2 * R + 400);
+  parts.push(place(paint(new THREE.PlaneGeometry(size, size, size / 10, size / 10), def.ground), { r: [-Math.PI / 2, 0, 0] }));
 
   // road and curbs, one quad per step so stripes stay crisp
   const P = [], C = [], col = new THREE.Color();
@@ -1554,7 +1780,7 @@ function buildTrack(def) {
         const [a0, a1] = at(l0), [b0, b1] = at(l1);
         quad(a0, b0, b1, a1, color, y);
       };
-      strip(-H, H, def.road);
+      strip(-H, H, path.road || def.road);
       const k = Math.floor(i / per);
       if (def.line && Math.floor(k / 4) % 2 === 0) strip(-0.25, 0.25, def.line, 0.04);
       const stripe = def.curbs[Math.floor(k / 3) % 2];
@@ -1568,7 +1794,7 @@ function buildTrack(def) {
     }
   }
   // Boost pads on the straights, drawn on the road: orange with white arrows.
-  def.pads = [...findPads(), ...BRANCHES.flatMap((b) => b.padAt.map((k) => ({ path: b, f: Math.round(k * (b.n - 1)), lat: 0 })))];
+  def.pads = [...findPads(def.padCount), ...BRANCHES.flatMap((b) => b.padAt.map((k) => ({ path: b, f: Math.round(k * (b.n - 1)), lat: 0 })))];
   for (const pad of def.pads) {
     const step = stepOf(pad.path), w = PAD_W / 2, at = (a, l) => pathPoint(pad.path, pad.f + a * step, pad.lat + l);
     const h = PAD_LEN / 2;
@@ -1650,7 +1876,7 @@ function buildTrack(def) {
   // scenery, kept clear of the road
   let placed = 0;
   while (placed < def.count) {
-    const x = (r() - 0.5) * 460, z = (r() - 0.5) * 460;
+    const x = (r() - 0.5) * (2 * R + 160), z = (r() - 0.5) * (2 * R + 160);
     if (nearTrack(new V3(x, 0, z), WALL + 8)) continue;
     placed++;
     let k = r();
@@ -1660,10 +1886,13 @@ function buildTrack(def) {
   }
   if (def.hills) {
     const hills = [];
-    for (let n = 0; n < 22; n++) {
-      const a = (n / 22) * Math.PI * 2 + r() * 0.2, d = 230 + r() * 40, s = 40 + r() * 40;
+    const count = Math.round((22 * R) / 150);
+    for (let n = 0; n < count; n++) {
+      const a = (n / count) * Math.PI * 2 + r() * 0.2, d = R + (R > 150 ? 115 : 80) + r() * 40, s = 40 + r() * 40;
       const c = new V3(Math.cos(a) * d, -s * 0.35, Math.sin(a) * d), rad = new V3(s * 1.6, s, s * 1.6);
-      // A hill over the road gets a hole cut through it for a tunnel.
+      // A hill over the road gets a hole cut through it for a tunnel. Only the
+      // main road gets tunnels, so on the long tracks no hill sits over a branch.
+      if (R > 150 && BRANCHES.some((br) => br.P.some((p) => Math.hypot(p.x - c.x, p.z - c.z) < rad.x + wallOf(br) + 2))) continue;
       const overRoad = nearTrack(c.clone().setY(0), rad.x + WALL + 2);
       let g = place(paint(overRoad ? sphere(96, 48) : sphere(12, 8), def.hills[n % 2]), { p: c.toArray(), s: rad.toArray() });
       if (overRoad) {
@@ -1677,7 +1906,7 @@ function buildTrack(def) {
   }
   if (def.clouds) {
     for (let n = 0; n < 14; n++) {
-      const a = r() * Math.PI * 2, d = 120 + r() * 120, y = 45 + r() * 30;
+      const a = r() * Math.PI * 2, d = (120 + r() * 120) * R / 150, y = 45 + r() * 30;
       for (let k = 0; k < 4; k++) {
         const s = 5 + r() * 5;
         parts.push(place(paint(sphere(9, 6), '#ffffff'),
@@ -1701,28 +1930,31 @@ const SNACK_GEO = {
   fries: merge(shrink(friesParts(true), 0.45, [0, 0.05, 0])),
 };
 const FOODS = Object.keys(SNACK_GEO);
+// Eight rows on most tracks, spread evenly round the lap; the long tracks use
+// more of them (`snackRows`), so they're as close together.
+const SNACK_ROWS = 16;
 const snacks = [];
 {
   const r = rng(21);
-  for (let k = 0; k < 8; k++) {
+  for (let k = 0; k < SNACK_ROWS; k++) {
     for (const lat of [-4, 0, 4]) {
       const food = FOODS[Math.floor(r() * FOODS.length)];
       const m = mesh(SNACK_GEO[food]);
       scene.add(m);
-      snacks.push({ m, food, f: 60 + k * (N / 8) + lat * 2, lat, lat0: lat, base: new V3(), gone: 0 });
+      snacks.push({ m, food, row: k, f: 0, lat, lat0: lat, base: new V3(), gone: 0, off: false });
     }
   }
 }
 
-// Switch tracks: the road, everything around it, the sky and the snacks.
-function loadTrack(def) {
-  if (track === def) return;
-  if (track) track.mesh.visible = false;
-  track = def;
+// A track's shape: its roads, forks and jumps, and where its snacks go. The
+// pick screen also uses this to draw every track's picture.
+function shapeTrack(def) {
   HALF = def.half || 7;
   WALL = HALF + 3.5;
   setCurve(def.ctrl);
   MAIN = def.main ||= { main: true, P: TP, T: TT, R: TR, n: N, len: TL, half: HALF, from: 0, to: 0, span: N };
+  const rows = def.snackRows || 8;
+  for (const p of snacks) { p.off = p.row >= rows; p.f = 60 + p.row * (N / rows) + p.lat0 * 2; }
   if (!def.branchPaths) {
     def.branchPaths = (def.branches || []).map(makeBranch);
     BRANCHES = def.branchPaths;
@@ -1730,13 +1962,25 @@ function loadTrack(def) {
   }
   BRANCHES = def.branchPaths;
   // Jumps on the main road are a ramp to one side, for a landing boost; on a
-  // branch, the ramp over its hazard.
-  RAMPS = [...(def.jumps || []).map(([f, lat]) => ({ path: MAIN, f, lat: lat * HALF })),
-    ...BRANCHES.flatMap((b) => b.gaps.map((g) => ({ path: b, f: g.ramp, lat: g.lat, gap: g })))];
+  // branch, the ramp over its hazard, or ramps of its own just for fun.
+  RAMPS = [...(def.jumps || []).map(([f, lat]) => ({ path: MAIN, f: sampleAt(f), lat: lat * HALF })),
+    ...BRANCHES.flatMap((b) => [...b.gaps.map((g) => ({ path: b, f: g.ramp, lat: g.lat, gap: g })),
+      ...b.jumpAt.map(([k, lat]) => ({ path: b, f: Math.round(k * (b.n - 1)), lat: lat * b.half }))])];
+}
+
+// Switch tracks: the road, everything around it, the sky and the snacks.
+function loadTrack(def) {
+  if (track === def) return;
+  if (track) track.mesh.visible = false;
+  track = def;
+  shapeTrack(def);
   if (!def.mesh) { def.mesh = buildTrack(def); scene.add(def.mesh); }
   def.mesh.visible = true;
   compMat.uniforms.uSky.value.set(...def.sky);
-  for (const p of snacks) { p.lat = p.lat0 * HALF / 7; trackPoint(p.f, p.lat, p.base); p.m.position.copy(p.base); }
+  for (const p of snacks) {
+    p.lat = p.lat0 * HALF / 7; trackPoint(p.f, p.lat, p.base); p.m.position.copy(p.base);
+    p.m.visible = !p.off;
+  }
 }
 loadTrack(TRACKS[0]);
 
@@ -2072,7 +2316,7 @@ function resetRace() {
       itemCd: 0, think: 0, held: 0,
       hopT: 0, hopY: 0, hopHeld: false, drift: 0, driftLv: 0, driftYaw: 0, charge: 0, boost: 0, stall: 0, gasAt: null });
   });
-  for (const p of snacks) { p.gone = 0; p.m.visible = true; }
+  for (const p of snacks) { p.gone = 0; p.m.visible = !p.off; }
   clearFx();
   raceTime = 0;
   syncRacers(0);
@@ -2532,6 +2776,7 @@ function syncRacers(t, dt = 0) {
 function updateSnacks(dt, t) {
   const racing = state === 'race' || state === 'done';
   for (const p of snacks) {
+    if (p.off) continue;
     if (p.gone > 0) {
       p.gone -= dt;
       if (p.gone <= 0) p.m.visible = true;
@@ -3160,17 +3405,26 @@ function trackCenter() {
   }
   return track.center;
 }
+// How far the camera sees: further when looking down on a whole long track.
+function setFar(far) {
+  if (camera.far === far) return;
+  camera.far = compMat.uniforms.uFar.value = far;
+  sketchMat.uniforms.uFade.value = far / 400;
+  camera.updateProjectionMatrix();
+}
 function updateCamera(dt, t) {
+  setFar(state === 'title' && pickStep === 'track' ? Math.max(400, 3 * (track.reach ||= reachOf()) - 50) : 400);
   if (state === 'title') {
     const a = (ORBIT === null ? t * 0.35 : ORBIT) + player.heading;
     let wantPos, wantLook;
     if (pickStep === 'track') {
       // High over the whole track, slowly circling. Looking at a point a bit
       // nearer than the middle keeps the track above the pick panel.
+      // Further out over the long tracks.
       const b = (ORBIT === null ? t * 0.08 : ORBIT);
-      const c = trackCenter();
-      wantPos = new V3(c.x + Math.sin(b) * 170, 165, c.z + Math.cos(b) * 170);
-      wantLook = new V3(c.x + Math.sin(b) * 55, 0, c.z + Math.cos(b) * 55);
+      const c = trackCenter(), k = (track.reach ||= reachOf()) / 150;
+      wantPos = new V3(c.x + Math.sin(b) * 170 * k, 165 * k, c.z + Math.cos(b) * 170 * k);
+      wantLook = new V3(c.x + Math.sin(b) * 55 * k, 0, c.z + Math.cos(b) * 55 * k);
     } else {
       wantPos = new V3(player.pos.x + Math.sin(a) * 5, 2.3, player.pos.z + Math.cos(a) * 5);
       wantLook = player.pos.clone().setY(0.15);     // low, so the kart sits above the pick panel
@@ -3258,20 +3512,75 @@ for (const r of RACERS) {
   $('cards').append(b);
 }
 
-const TRACK_KEY = 'pet-racers-track';
-for (const [label, hard] of [['Easy', false], ['Harder', true]]) {
-  const row = document.createElement('div');
-  row.className = 'trackRow';
-  row.innerHTML = `<span>${label}</span>`;
-  for (const def of TRACKS.filter((d) => !!d.hard === hard)) {
-    const b = document.createElement('button');
-    b.textContent = def.name;
-    b.dataset.name = def.name;
-    b.addEventListener('click', () => chooseTrack(def));
-    row.append(b);
+// Each track's picture on the pick screen: the track from above, drawn like
+// the mini map but in the track's own colors, on its ground.
+const THUMB_PX = 88;
+function drawThumb(def) {
+  shapeTrack(def);
+  const dpr = Math.min(2, window.devicePixelRatio || 1), size = Math.round(THUMB_PX * dpr);
+  const roads = [MAIN, ...BRANCHES];
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (const path of roads) for (const p of path.P) { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z); }
+  const span = Math.max(x1 - x0, z1 - z0), k = (size * 0.84) / span;
+  const ox = size / 2 - ((x0 + x1) / 2) * k, oz = size / 2 - ((z0 + z1) / 2) * k;
+  const at = (p) => [ox + p.x * k, oz + p.z * k];
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  const cell = 3 * dpr;                                       // the ground, in little squares
+  for (let px = 0; px < size; px += cell) {
+    for (let py = 0; py < size; py += cell) {
+      const wx = (px + cell / 2 - ox) / k, wz = (py + cell / 2 - oz) / k;
+      g.fillStyle = def.ground(wx, -wz);
+      g.fillRect(px, py, cell + 0.5, cell + 0.5);
+    }
   }
-  $('tracks').append(row);
+  g.lineJoin = g.lineCap = 'round';
+  const stroke = (pts, width, color) => {
+    g.strokeStyle = color; g.lineWidth = width; g.beginPath();
+    pts.forEach((p, i) => { const [x, y] = at(p); if (i) g.lineTo(x, y); else g.moveTo(x, y); });
+    g.stroke();
+  };
+  const loop = (path) => (path.main ? [...path.P, path.P[0]] : path.P);
+  const w = (path) => Math.max(2.5 * dpr, path.half * 2 * k);
+  for (const path of roads) stroke(loop(path), w(path) + 3 * dpr, INK);
+  for (const path of roads) stroke(loop(path), w(path) + 1.2 * dpr, def.curbs[0]);
+  for (const path of roads) stroke(loop(path), w(path), path.road || def.road);
+  for (const br of BRANCHES) for (const gap of br.gaps) {
+    stroke(br.P.slice(Math.floor(gap.a), Math.ceil(gap.b) + 1), w(br) + 1.2 * dpr, gap.kind === 'water' ? def.water : def.rough);
+  }
+  for (const rp of RAMPS) {                                   // jumps, as orange dots
+    const [x, y] = at(pathPoint(rp.path, rp.f, rp.lat));
+    g.beginPath(); g.arc(x, y, 1.6 * dpr, 0, Math.PI * 2); g.fillStyle = '#ff6a00'; g.fill();
+  }
+  // the start line, checkered
+  for (let n = 0; n < 4; n++) {
+    const a = TP[0].clone().addScaledVector(TR[0], -HALF + (n * HALF) / 2), b = TP[0].clone().addScaledVector(TR[0], -HALF + ((n + 1) * HALF) / 2);
+    const [ax, ay] = at(a), [bx, by] = at(b);
+    g.strokeStyle = n % 2 ? '#fffdf6' : '#2a2228'; g.lineWidth = 2.5 * dpr; g.lineCap = 'butt';
+    g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke();
+  }
+  return c;
 }
+
+const TRACK_KEY = 'pet-racers-track';
+for (const [label, group] of [['Easy', 'easy'], ['Harder', 'hard'], ['Long', 'long']]) {
+  const set = document.createElement('div');
+  set.className = 'trackSet';
+  set.innerHTML = `<span>${label}</span><div></div>`;
+  for (const def of TRACKS.filter((d) => (d.long ? 'long' : d.hard ? 'hard' : 'easy') === group)) {
+    const b = document.createElement('button');
+    b.className = 'tc';
+    b.dataset.name = def.name;
+    const name = document.createElement('b');
+    name.textContent = def.name;
+    b.append(drawThumb(def), name);
+    b.addEventListener('click', () => chooseTrack(def));
+    set.lastChild.append(b);
+  }
+  $('tracks').append(set);
+}
+shapeTrack(track);                                            // back to the track that's loaded
 
 // The pick screen is two steps: a pet, then a track. Only the host (or
 // someone racing alone) gets to the track step.
@@ -3439,7 +3748,7 @@ function buildMap() {
   };
   const loop = (path) => (path.main ? [...path.P, path.P[0]] : path.P);
   for (const path of roads) stroke(loop(path), Math.max(3, path.half * 2 * k) + 3 * dpr, INK);       // outlines first,
-  for (const path of roads) stroke(loop(path), Math.max(2, path.half * 2 * k), track.road);          // then the roads over them
+  for (const path of roads) stroke(loop(path), Math.max(2, path.half * 2 * k), path.road || track.road);   // then the roads over them
   for (const br of BRANCHES) for (const gap of br.gaps) {
     stroke(br.P.slice(Math.floor(gap.a), Math.ceil(gap.b) + 1), Math.max(2, br.half * 2 * k), gap.kind === 'water' ? track.water : track.rough);
   }

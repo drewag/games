@@ -14,8 +14,10 @@ The **pick screen** has two steps, one after the other:
    in its kart, slowly turning, with the kart's name and the power's name under it.
    **Easy driving** or **Pro: hop & drift** picks the controls. **Next ▶** goes on.
 2. **A track.** The camera rises high over the track and slowly circles it. The tracks
-   come in two rows: **Easy** (Park, Backyard, Kitchen) and **Harder** (Snow, Bakery,
-   Toy Room), with a line about the picked one underneath. **Race!** starts, and
+   sit in one row of cards, each with a picture of the track from above (its roads,
+   forks, water and jumps, on its own ground), in three groups: **Easy** (Park,
+   Backyard, Kitchen), **Harder** (Snow, Bakery, Toy Room) and **Long** (Beach, Farm,
+   Jungle), with a line about the picked one underneath. **Race!** starts, and
    **◀ Pets** goes back.
 
 The game remembers the last pet, track and controls picked. Each iPad picks its own
@@ -27,6 +29,14 @@ The **harder tracks** have more and tighter corners (hairpins on Snow, zig-zags 
 Bakery, both in the Toy Room), a narrower road, a bigger slowdown off it, and rivals a
 little quicker (2–4%). Hedges, catch-up and everything else work the same.
 
+The **long tracks** are about twice as far round as the others (2,000–2,350 units a
+lap against 750–1,400), with a little wider road than the harder ones, rivals barely quicker
+(1%), twice the snack rows and six boost pads. Their forks are mostly whole other roads,
+some as long as a quarter of the lap, rather than short cuts: a different way through
+with its own look (a wooden boardwalk, a stone temple path), some with jumps of their
+own. Beach has a **three-way fork**, where two branches leave and rejoin at the same
+places as the main road; rivals pick each about a third of the time.
+
 Every track but the Park has **forks** and **jumps**:
 
 | Track | Forks | Jumps on the main road |
@@ -37,9 +47,12 @@ Every track but the Park has **forks** and **jumps**:
 | Snow | a shortcut across the bottom-left corner, over an icy creek | one on the middle straight, after a boost pad |
 | Bakery | a boost lane past the top zig-zags, and a shortcut across the top-right corner over syrup | one on the left side |
 | Toy Room | two narrow shortcuts, across the bulge in the hook and across the neck of the bottom-right loop, each over bath water | one on the first straight |
+| Beach | a wooden boardwalk inland, a three-way fork at the top (over the tide pools, the middle, or over the dunes with three jumps), and a wooden pier out over the sea | one on the start straight |
+| Farm | a long winding lane through the orchard, a cut across the duck pond, and a bumpy road round the barnyard with three jumps | one on the top straight |
+| Jungle | straight across the river over the water, the long way through the temple ruins on a narrow stone path with two jumps, and a cut through the mud | one on the start straight |
 
 No road is the obvious pick. A **shortcut** saves time but has hazards; a **boost lane**
-is longer but has boost pads; the main road has the snacks. The game sizes the hazards
+is longer but has boost pads (and sometimes jumps, which boost too); the main road has the snacks. The game sizes the hazards
 and counts the pads so that, on average, every road through a fork takes about as long,
 and a clean jump or a well-hit pad is what makes one pay. See
 [details/tracks.md](details/tracks.md) for the formula.

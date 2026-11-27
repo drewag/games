@@ -28,6 +28,8 @@ match it.
 - [x] Mini map in the top right
 - [x] Rivals use items, their powers included
 - [x] Best time on each track, kept on the iPad
+- [x] Long tracks: Beach, Farm, Jungle, about twice round, with long alternate roads and a three-way fork
+- [x] A drawn picture of each track on the pick screen
 
 ## Next
 
@@ -39,6 +41,8 @@ match it.
   (1.6 s rough, 3 s water) right? Do kids hit the side ramps, or need them wider?
 - [ ] Rivals' items on the iPad: too mean for Zachary on the easy tracks? Tune the wait between items
 - [ ] Easy driving without steering help: can Zachary get round? If not, set `STEERING_HELP` back on
+- [ ] Long tracks on the iPad: is a three-lap race (about 4–5 minutes) too long? Frame rate with
+  the bigger scenery? Is each long fork easy to see coming?
 - [ ] Race with three or more real iPads: check smoothness and Wi-Fi drops
 
 ## Later
