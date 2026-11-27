@@ -42,30 +42,58 @@
   }
   #map {
     position: absolute; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right));
-    width: 170px; height: 170px; padding: 0; pointer-events: none; border-radius: 18px 255px 18px 225px / 225px 18px 255px 18px;
+    width: min(170px, 30vmin); height: min(170px, 30vmin); padding: 0; pointer-events: none; border-radius: 18px 255px 18px 225px / 225px 18px 255px 18px;
   }
-  .pad { position: absolute; bottom: calc(20px + env(safe-area-inset-bottom)); display: flex; gap: 18px; }
-  #steer { left: calc(20px + env(safe-area-inset-left)); }
-  #act, #pro { right: calc(20px + env(safe-area-inset-right)); }
-  body.pro #act { bottom: calc(136px + env(safe-area-inset-bottom)); }
-  #pro .btn { font-size: 30px; }
-  #pro #back { width: 84px; height: 84px; align-self: end; font-size: 24px; }
+  /* Race controls, sized off the screen so they fit a phone as well as an iPad:
+     a joystick on the left, a cluster of round buttons on the right. Each button
+     is placed by its center (--x, --y in from the bottom-right corner), size (--s)
+     and text size (--f), all in units of --u. */
+  :root { --u: clamp(44px, 11vmin, 90px); }
+  #stickZone { position: absolute; left: 0; top: 0; bottom: 0; width: 45%; touch-action: none; }
+  #stick {
+    position: absolute; width: calc(2.4 * var(--u)); height: calc(2.4 * var(--u)); margin: calc(-1.2 * var(--u));
+    border-radius: 50%; background: rgba(255, 250, 240, 0.35); border: 3px solid rgba(60, 40, 20, 0.45);
+    box-sizing: border-box; pointer-events: none;
+    left: calc(1.6 * var(--u) + env(safe-area-inset-left)); bottom: calc(1.6 * var(--u) + env(safe-area-inset-bottom));
+  }
+  #knob {
+    position: absolute; left: 50%; top: 50%; width: var(--u); height: var(--u); margin: calc(-0.5 * var(--u));
+    border-radius: 50%; background: var(--paper); border: 4px solid var(--ink); box-sizing: border-box;
+    box-shadow: 2px 3px 0 rgba(90, 50, 20, 0.25);
+  }
+  #pad {
+    position: absolute; width: calc(3.7 * var(--u)); height: calc(3.7 * var(--u)); pointer-events: none;
+    right: calc(10px + env(safe-area-inset-right)); bottom: calc(10px + env(safe-area-inset-bottom));
+  }
   .btn {
-    width: 104px; height: 104px; display: grid; place-items: center; font-size: 46px;
-    touch-action: none; cursor: pointer;
+    position: absolute; pointer-events: auto; box-sizing: border-box;
+    width: calc(var(--s) * var(--u)); height: calc(var(--s) * var(--u));
+    right: calc((var(--x) - var(--s) / 2) * var(--u)); bottom: calc((var(--y) - var(--s) / 2) * var(--u));
+    border-radius: 50%; border-width: 3px; display: grid; place-content: center; text-align: center;
+    font-size: max(9px, calc(var(--f) * var(--u))); line-height: 1.05; touch-action: none; cursor: pointer;
   }
   .btn.down { transform: translate(2px, 3px); box-shadow: 1px 1px 0 rgba(90, 50, 20, 0.25); }
-  #look { width: 84px; height: 84px; align-self: end; font-size: 20px; line-height: 1.1; text-align: center; }
-  #power { width: 150px; font-size: 22px; line-height: 1.05; text-align: center; opacity: 0.45; }
-  #power b, #spare b { display: block; font-size: 40px; font-weight: normal; line-height: 1.1; }
+  #power b, #spare b { display: block; font-weight: normal; line-height: 1.1; font-size: calc(var(--i) * var(--u)); }
+  /* Easy: a big Item button, with Spare and Look back tucked beside it. */
+  #power { --s: 1.6; --x: 1; --y: 1; --f: 0.19; --i: 0.6; opacity: 0.45; }
+  #spare { --s: 0.95; --x: 2.55; --y: 0.65; --f: 0.17; --i: 0.42; opacity: 0.45; }
+  #look { --s: 0.95; --x: 0.75; --y: 2.55; --f: 0.2; }
+  .pro-only { display: none !important; }
+  /* Pro: a diamond like a game pad. Go on the right and Hop below it, so one
+     thumb rolls between them; Back on the left, Item on top. */
+  body.pro .pro-only { display: grid !important; }
+  #gas { --s: 1.2; --x: 0.65; --y: 1.85; --f: 0.32; background: #fffdf6; }
+  #hop { --s: 1.2; --x: 1.85; --y: 0.65; --f: 0.32; background: #fffdf6; }
+  #back { --s: 1; --x: 3.05; --y: 1.85; --f: 0.26; }
+  body.pro #power { --s: 1.2; --x: 1.85; --y: 3.05; --f: 0.15; --i: 0.45; }
+  body.pro #spare { --s: 0.8; --x: 3.05; --y: 3.15; --i: 0.34; }
+  body.pro #look { --s: 0.8; --x: 0.6; --y: 3.15; --f: 0.17; }
   #power.ready { opacity: 1; background: #fffdf6; }
   #power.special { background: #ffe58a; animation: pulse 0.6s ease-in-out infinite alternate; }
   #power.rolling b, #spare.rolling b { animation: roll 0.12s steps(2) infinite; }
   #power.star { background: #fff3a0; animation: pulse 0.4s ease-in-out infinite alternate; }
   #spare.star { background: #fff3a0; }
   @keyframes roll { to { transform: translateY(-4px) rotate(8deg); } }
-  #spare { width: 72px; height: 72px; align-self: start; font-size: 13px; line-height: 1; text-align: center; opacity: 0.45; }
-  #spare b { font-size: 30px; }
   #spare.ready { opacity: 1; }
   #spare.special { background: #ffe58a; }
   @keyframes pulse { to { transform: scale(1.06) rotate(-2deg); } }
@@ -175,23 +203,18 @@
 <canvas id="c"></canvas>
 <div class="ui">
   <div id="flash"></div>
+  <div id="stickZone" class="hidden"><div id="stick"><div id="knob"></div></div></div>
   <a id="home" class="drawn" href="../" aria-label="Back to games">&#8962;</a>
   <button id="mute" class="drawn" aria-label="Sound on or off"></button>
   <div id="hud" class="drawn hidden"></div>
   <canvas id="map" class="drawn hidden" aria-hidden="true"></canvas>
-  <div id="steer" class="pad hidden">
-    <div id="left" class="btn drawn" data-hold="left">&#9664;</div>
-    <div id="right" class="btn drawn" data-hold="right">&#9654;</div>
-  </div>
-  <div id="act" class="pad hidden">
+  <div id="pad" class="hidden">
     <div id="look" class="btn drawn" data-hold="look">Look<br>back</div>
     <div id="spare" class="btn drawn" aria-label="Spare: tap to swap"></div>
     <div id="power" class="btn drawn"></div>
-  </div>
-  <div id="pro" class="pad hidden">
-    <div id="back" class="btn drawn" data-hold="back">Back</div>
-    <div id="hop" class="btn drawn" data-hold="hop">Hop</div>
-    <div id="gas" class="btn drawn" data-hold="gas">Go</div>
+    <div id="back" class="btn drawn pro-only" data-hold="back">Back</div>
+    <div id="hop" class="btn drawn pro-only" data-hold="hop">Hop</div>
+    <div id="gas" class="btn drawn pro-only" data-hold="gas">Go</div>
   </div>
   <div id="big"></div>
   <div id="pop">Bonk!</div>
@@ -2749,6 +2772,7 @@ const sfx = (name, ...a) => { if (AC && SFX[name]) SFX[name](...a); };
 // ---------------------------------------------------------------------------
 const LAPS = 3;
 const input = { left: false, right: false, gas: false, back: false, hop: false, look: false };
+let stick = 0;                // the joystick: -1 full left to 1 full right
 let pro = false;              // Pro driving: gas, hop and drift, no steering help
 const STEERING_HELP = false;  // Easy driving: ease toward the road when no steering button is held
 let player = RACERS[0];
@@ -2835,8 +2859,8 @@ function updateHop(me, dt, want, canDrive) {
     if (me.hopT === 0) { me.hopY = 0; puff(me.pos.clone().setY(0.3).addScaledVector(fwdOf(me), -1)); }
   }
   // On the ground, still holding Hop from the hop, steering: start drifting.
-  if (!me.drift && me.hopHeld && me.hopT <= 0 && want && me.speed > 15) {
-    me.drift = want;
+  if (!me.drift && me.hopHeld && me.hopT <= 0 && Math.abs(want) > 0.3 && me.speed > 15) {
+    me.drift = Math.sign(want);
     me.charge = 0;
   }
   if (!me.drift) { me.driftLv = 0; return; }
@@ -2968,7 +2992,7 @@ function updatePlayer(dt, canDrive) {
     if (me.sunk <= 0) { me.sunk = 0; resurface(me); }
     return;
   }
-  const want = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+  const want = THREE.MathUtils.clamp((input.right ? 1 : 0) - (input.left ? 1 : 0) + stick, -1, 1);
   me.steer += (want - me.steer) * Math.min(1, dt * 7);
   // Easy driving, and after the finish line in Pro, the kart drives itself.
   const easy = !pro || state === 'done';
@@ -3017,7 +3041,7 @@ function updatePlayer(dt, canDrive) {
   // Steering help: with no button held, ease toward the road ahead. Off for
   // now in Easy driving (you steer yourself); the kart still drives itself
   // after the finish line.
-  if ((state === 'done' || (easy && STEERING_HELP)) && !want && me.speed > 1) {
+  if ((state === 'done' || (easy && STEERING_HELP)) && Math.abs(want) < 0.1 && me.speed > 1) {
     const aim = aheadPoint(path, me.pf, 20, THREE.MathUtils.clamp(lat, -path.half + 2, path.half - 2) * 0.6);
     me.heading += angleTo(me.heading, Math.atan2(aim.x - me.pos.x, aim.z - me.pos.z)) * Math.min(1, dt * 1.6);
   }
@@ -4038,9 +4062,9 @@ function setState(s) {
   const racing = s === 'countdown' || s === 'race';
   $('hud').classList.toggle('hidden', !racing && s !== 'done');
   $('map').classList.toggle('hidden', !racing && s !== 'done');
-  $('steer').classList.toggle('hidden', !racing);
-  $('act').classList.toggle('hidden', !racing);
-  $('pro').classList.toggle('hidden', !racing || !pro);
+  $('stickZone').classList.toggle('hidden', !racing);
+  $('pad').classList.toggle('hidden', !racing);
+  if (!racing) releaseStick();
   $('pick').classList.toggle('hidden', s !== 'title');
   $('title').classList.toggle('hidden', s !== 'title');
   $('card').classList.toggle('hidden', s !== 'done');
@@ -4382,7 +4406,7 @@ $('friendBtn').addEventListener('click', () => (inRoom() ? leaveRoom() : showNet
 $('again').addEventListener('click', startRace);
 $('other').addEventListener('click', backToPick);
 
-// Held buttons follow the finger: sliding a thumb from ◀ to ▶, or from Go
+// Held buttons follow the finger: sliding a thumb from Go
 // onto Hop, moves the press with it.
 const touches = new Map();    // pointer → the held button under it
 const keysDown = new Set();
@@ -4411,7 +4435,45 @@ window.addEventListener('pointermove', (e) => {
 for (const ev of ['pointerup', 'pointercancel']) {
   window.addEventListener(ev, (e) => { if (touches.delete(e.pointerId)) refreshInput(); });
 }
-window.addEventListener('blur', () => { touches.clear(); keysDown.clear(); refreshInput(); });
+window.addEventListener('blur', () => { touches.clear(); keysDown.clear(); refreshInput(); releaseStick(); });
+
+// The joystick: put a thumb down anywhere on the left of the screen and the
+// stick centers there; sliding it sideways steers, further for a sharper turn.
+// Let go and it springs back to its resting place, bottom-left.
+let stickId = null, stickX = 0, stickY = 0;
+const stickR = () => $('stick').offsetWidth / 2;
+function placeStick(x, y) {
+  stickX = x; stickY = y;
+  Object.assign($('stick').style, { left: `${x}px`, top: `${y}px`, bottom: 'auto' });
+}
+function moveStick(x, y) {
+  const r = stickR();
+  let dx = x - stickX, dy = y - stickY;
+  const d = Math.hypot(dx, dy), k = d > r ? r / d : 1;
+  dx *= k; dy *= k;
+  $('knob').style.transform = `translate(${dx}px, ${dy}px)`;
+  // A little dead zone in the middle, and full lock a bit before the edge.
+  const m = Math.abs(dx) / r;
+  stick = Math.sign(dx) * THREE.MathUtils.clamp((m - 0.12) / 0.63, 0, 1);
+}
+function releaseStick() {
+  stickId = null; stick = 0;
+  $('knob').style.transform = '';
+  Object.assign($('stick').style, { left: '', top: '', bottom: '' });
+}
+$('stickZone').addEventListener('pointerdown', (e) => {
+  if (stickId !== null) return;
+  e.preventDefault();
+  stickId = e.pointerId;
+  // Keep the whole ring on screen, so a thumb near the edge can still steer that way.
+  const z = $('stickZone').getBoundingClientRect(), r = stickR();
+  placeStick(THREE.MathUtils.clamp(e.clientX, z.left + r, z.right - r), THREE.MathUtils.clamp(e.clientY, z.top + r, z.bottom - r));
+  moveStick(e.clientX, e.clientY);
+});
+window.addEventListener('pointermove', (e) => { if (e.pointerId === stickId) moveStick(e.clientX, e.clientY); });
+for (const ev of ['pointerup', 'pointercancel']) {
+  window.addEventListener(ev, (e) => { if (e.pointerId === stickId) releaseStick(); });
+}
 $('power').addEventListener('pointerdown', (e) => { e.preventDefault(); usePower(); });
 $('spare').addEventListener('pointerdown', (e) => { e.preventDefault(); swapItems(); });
 

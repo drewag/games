@@ -62,16 +62,20 @@ and a clean jump or a well-hit pad is what makes one pay. See
 
 ## Controls
 
-The game is played in landscape on an iPad. On-screen buttons sit under the thumbs:
+The game is played in landscape on an iPad or a phone. The controls sit under the
+thumbs like most phone games, and size themselves to the screen:
 
-- **◀ ▶**, bottom-left, held to steer
-- **Item**, bottom-right, showing the item in hand (see [Snacks and items](#snacks-and-items)).
-  It's faded when empty, and yellow and wobbling when it holds your pet's power.
+- A **joystick** on the left steers. A thumb put down anywhere on the left of the
+  screen centers the stick there; sliding it sideways steers, further for a sharper
+  turn. Let go and it springs back to bottom-left.
+- **Item**, the big round button bottom-right, showing the item in hand (see
+  [Snacks and items](#snacks-and-items)). It's faded when empty, and yellow and
+  wobbling when it holds your pet's power.
 - **Spare**, a smaller button beside it, showing the spare item. Tapping it swaps the two.
-- **Look back**, beside Power, held to look behind: the camera flips to face back down
+- **Look back**, above Item, held to look behind: the camera flips to face back down
   the road from in front of the kart, and snaps back when let go.
 
-There's no steering help: with neither button held the kart goes straight, so you steer
+There's no steering help: with the stick let go the kart goes straight, so you steer
 it round every bend yourself. (We're trying this out; Easy driving used to ease the kart
 toward the road ahead on its own. The `STEERING_HELP` switch in `index.html` turns that
 back on.) After the finish line the kart drives itself. Arrow keys and space work on a computer,
@@ -80,12 +84,13 @@ E swaps the spare, and C or Q looks back.
 ### Pro driving
 
 Pro driving copies Mario Kart's controls. There's no steering help, and the kart only
-goes while you hold the gas. Three more buttons sit bottom-right, with Item and Spare moved up
-above them:
+goes while you hold the gas. The buttons on the right become a diamond, like a game pad,
+with Spare and Look back above its corners:
 
-- **Go**, held to drive. Let go and the kart coasts to a stop.
-- **Back** brakes, then reverses slowly.
-- **Hop** makes the kart hop. It also counts as Go while held.
+- **Go**, on the right, held to drive. Let go and the kart coasts to a stop.
+- **Hop**, below, makes the kart hop. It also counts as Go while held.
+- **Back**, on the left, brakes, then reverses slowly.
+- **Item**, on top.
 
 A thumb can slide between buttons without lifting, from Go onto Hop for example. On a
 computer: up arrow or W for Go, down arrow or S for Back, Shift or X for Hop.
