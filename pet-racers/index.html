@@ -48,7 +48,7 @@
      a joystick on the left, a cluster of round buttons on the right. Each button
      is placed by its center (--x, --y in from the bottom-right corner), size (--s)
      and text size (--f), all in units of --u. */
-  :root { --u: clamp(44px, 11vmin, 90px); }
+  :root { --u: clamp(44px, 11vmin, 60px); }   /* phone-sized, and not much bigger on an iPad */
   #stickZone { position: absolute; left: 0; top: 0; bottom: 0; width: 45%; touch-action: none; }
   #stick {
     position: absolute; width: calc(2.4 * var(--u)); height: calc(2.4 * var(--u)); margin: calc(-1.2 * var(--u));
@@ -61,6 +61,14 @@
     border-radius: 50%; background: var(--paper); border: 4px solid var(--ink); box-sizing: border-box;
     box-shadow: 2px 3px 0 rgba(90, 50, 20, 0.25);
   }
+  /* Easy steers with ◀ ▶ buttons bottom-left; Pro with the joystick. */
+  #steer {
+    position: absolute; width: calc(2.7 * var(--u)); height: calc(1.5 * var(--u)); pointer-events: none;
+    left: calc(10px + env(safe-area-inset-left)); bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+  #left { --s: 1.2; --x: 2.05; --y: 0.75; --f: 0.5; }
+  #right { --s: 1.2; --x: 0.65; --y: 0.75; --f: 0.5; }
+  body.pro #steer, body:not(.pro) #stickZone { display: none; }
   #pad {
     position: absolute; width: calc(3.7 * var(--u)); height: calc(3.7 * var(--u)); pointer-events: none;
     right: calc(10px + env(safe-area-inset-right)); bottom: calc(10px + env(safe-area-inset-bottom));
@@ -208,6 +216,10 @@
   <button id="mute" class="drawn" aria-label="Sound on or off"></button>
   <div id="hud" class="drawn hidden"></div>
   <canvas id="map" class="drawn hidden" aria-hidden="true"></canvas>
+  <div id="steer" class="hidden">
+    <div id="left" class="btn drawn" data-hold="left">&#9664;</div>
+    <div id="right" class="btn drawn" data-hold="right">&#9654;</div>
+  </div>
   <div id="pad" class="hidden">
     <div id="look" class="btn drawn" data-hold="look">Look<br>back</div>
     <div id="spare" class="btn drawn" aria-label="Spare: tap to swap"></div>
@@ -4064,6 +4076,7 @@ function setState(s) {
   $('map').classList.toggle('hidden', !racing && s !== 'done');
   $('stickZone').classList.toggle('hidden', !racing);
   $('pad').classList.toggle('hidden', !racing);
+  $('steer').classList.toggle('hidden', !racing);
   if (!racing) releaseStick();
   $('pick').classList.toggle('hidden', s !== 'title');
   $('title').classList.toggle('hidden', s !== 'title');
@@ -4406,7 +4419,7 @@ $('friendBtn').addEventListener('click', () => (inRoom() ? leaveRoom() : showNet
 $('again').addEventListener('click', startRace);
 $('other').addEventListener('click', backToPick);
 
-// Held buttons follow the finger: sliding a thumb from Go
+// Held buttons follow the finger: sliding a thumb from ◀ to ▶, or from Go
 // onto Hop, moves the press with it.
 const touches = new Map();    // pointer → the held button under it
 const keysDown = new Set();
