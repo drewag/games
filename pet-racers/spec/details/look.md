@@ -23,8 +23,12 @@ Things drawn on layer `LAYER_NO_EDGES` (the soft shadows) are skipped in pass 2.
   ended up fully cross-hatched.
 - **`paint(geo, fn)` returns a new geometry** for indexed input. It colors one triangle at a
   time so color bands follow edges instead of zigzagging. Always use the return value.
-- **Pet thickness** is `3 + 1.5 × min(dist, 4)` squares, where `dist` is the distance
-  from the edge of the drawing. The front is flat at z = 0, and depth grows backward.
+- **Pet shapes** come from each pet's `shape`: which rows are the head (`head`), the
+  rows above are ears (or a front-to-back crest with `top: 'mohawk'`), the last row is
+  legs and the rows between are body. The head is 9 blocks deep, the body 5 and the legs
+  3, centered under the head. `thin` chars are always ear-thin, `coat` colors the head
+  from 3 blocks back, `patches`, `band` (a strap round the sides, and the back with
+  `back: true`) and `drape` (hair down the back) paint the rest. The face is at z = 0.
 - **Strokes texture** channels: R = loose scribbles (grain), G and B = hatching at ±45°.
   World-space triplanar mapping keeps the texture from swimming as the camera moves. The
   `uBoil` offset jumps it 8 times a second.

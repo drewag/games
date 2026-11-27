@@ -6,11 +6,18 @@ glossy or realistic.
 
 ## Pets
 
-Each pet is built from its square drawing. Every square becomes a block, so the **front
-of the pet is the drawing**, exactly as on the card. Behind the face the pet gets thicker
-toward the middle (thin ears, a round back of the head), so it has body from the side
-and behind. The eyes, nose and cheeks are painted only on the front. Underneath they're
-the color around them.
+Each pet is built from its square drawing, as a whole blocky character. Every square
+becomes a block, so the **front of the pet's head is the drawing**, exactly as on the card.
+Behind the face the head is a deep block with its back edges rounded off; the ears are
+thin blocks set back on top, and the body and legs are smaller blocks under the middle of
+the head, with a short tail standing up behind. The eyes, nose and cheeks are painted
+only on the front. Underneath they're the color around them.
+
+What wraps round the back comes from the card: Buddy's head is black behind the tan face
+and Choco's dark purple behind the light one, Mango's brown and orange patches carry on
+over the back of the head, Halsy's goggles have a strap all the way round, Plufulous's
+glasses reach back along the sides under a rainbow crest, Scarlet Ivy's hair hangs down
+the back, Zeus's blue ears flop out sideways, and Fluff Puff has a round puff of a tail.
 
 The pet sits in its kart facing forward, so during a race you see the back of its head.
 The pick screen is where you see faces.

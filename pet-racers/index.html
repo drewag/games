@@ -555,8 +555,10 @@ const box = () => new THREE.BoxGeometry(1, 1, 1);
 const bottomHalf = (w = 14, h = 6) => new THREE.SphereGeometry(1, w, h, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2);
 
 // ---------------------------------------------------------------------------
-// Pets: built from the square drawings. The front is flat, exactly like the
-// card; the back puffs out so they have some body from the side.
+// Pets: built from the square drawings. The front of the head is the card,
+// exactly; behind it the pet is a whole blocky character: a deep head, thin
+// ears, a smaller body and legs, and a tail. `shape` says which rows are which
+// and adds what wraps round the back (a goggle strap, hair, patches).
 // ---------------------------------------------------------------------------
 const PETS = {
   Buddy: {
@@ -575,7 +577,7 @@ const PETS = {
     ],
     pal: { b: '#6b3a1e', t: '#efa632', g: '#a3a3ad', n: '#3a2a2a', p: '#f4a6c4' },
     inside: { g: 'b', n: 't', p: 't' },   // what eyes/nose/cheeks are made of underneath
-    back: {},
+    shape: { head: [1, 7], coat: 'b', tail: { ch: 'b', len: 4 } },
   },
   Duffy: {
     rows: [
@@ -593,7 +595,7 @@ const PETS = {
     ],
     pal: { y: '#f2b02e', g: '#4a4a52', k: '#2a2228', n: '#3a2a2a', p: '#f4a6c4' },
     inside: { g: 'y', k: 'y', n: 'y', p: 'y' },
-    back: {},
+    shape: { head: [1, 7], tail: { ch: 'y', len: 4 } },
   },
   Choco: {
     rows: [
@@ -612,7 +614,7 @@ const PETS = {
     ],
     pal: { u: '#4b1f8f', v: '#a58ad8', k: '#4a4a52', n: '#3a2a2a', p: '#f4a6c4' },
     inside: { k: 'v', n: 'v', p: 'v' },
-    back: { v: 'u' },
+    shape: { head: [2, 8], coat: 'u', tail: { ch: 'u', len: 4 } },
   },
   Mango: {
     rows: [
@@ -632,7 +634,7 @@ const PETS = {
     ],
     pal: { b: '#6b3a1e', o: '#f08a24', w: '#fbfaf6', g: '#4a4a52', n: '#3a2a2a', p: '#f4a6c4' },
     inside: { g: 'w', n: 'w', p: 'w' },
-    back: {},
+    shape: { head: [3, 9], tail: { ch: 'o', len: 5 }, patches: { b: [0, 4], o: [6, 10] } },
   },
   'Fluff Puff': {
     rows: [
@@ -653,7 +655,7 @@ const PETS = {
     ],
     pal: { w: '#e9e7e3', g: '#4a4a52', n: '#3a2a2a', p: '#f4a6c4' },
     inside: { g: 'w', n: 'w', p: 'w' },
-    back: {},
+    shape: { head: [4, 10], tail: { ch: 'w', len: 1, puff: true } },
   },
   Zeus: {
     rows: [
@@ -672,7 +674,7 @@ const PETS = {
     ],
     pal: { l: '#8fd3ec', L: '#2fb5b5', Z: '#e6a034', g: '#2a2228', k: '#2a2228', n: '#3a2a2a', p: '#f4a6c4' },
     inside: { g: 'Z', k: 'Z', n: 'Z', p: 'Z' },
-    back: {},
+    shape: { head: [1, 8], thin: 'lL', tail: { ch: 'Z', len: 4 } },
   },
   Plufulous: {
     rows: [
@@ -693,7 +695,7 @@ const PETS = {
     pal: { r: '#e53935', o: '#f08a24', Y: '#ffcf3f', G: '#5aa832', l: '#5aa9e6', u: '#7e4fd0',
       w: '#f2f0ec', E: '#3a8fd8', a: '#6d6d78', n: '#3a2a2a', p: '#f4a6c4' },
     inside: { E: 'w', a: 'w', n: 'w', p: 'w' },
-    back: {},
+    shape: { head: [1, 9], top: 'mohawk', band: { rows: [5], ch: 'E', to: 6 }, tail: { ch: 'w', len: 3 } },
   },
   'Scarlet Ivy': {
     rows: [
@@ -714,7 +716,7 @@ const PETS = {
     pal: { K: '#2a2228', G: '#5aa832', o: '#f08a24', w: '#f2f0ec', g: '#2a2228', k: '#4a4a52',
       n: '#8a8a92', r: '#d32f2f', p: '#f4a6c4' },
     inside: { g: 'w', k: 'w', n: 'w', r: 'w', p: 'w' },
-    back: {},
+    shape: { head: [0, 9], drape: { from: 2, rows: [3, 7] }, tail: { ch: 'w', len: 3 } },
   },
   Halsy: {
     rows: [
@@ -733,36 +735,61 @@ const PETS = {
     ],
     pal: { B: '#5b3418', m: '#7fd69a', s: '#b4b4c0', e: '#f6a35c', E: '#ffd9b3', Y: '#f2c14e', k: '#2a2228' },
     inside: { m: 'B', s: 'B', E: 'e', k: 'Y' },
-    back: {},
+    shape: { head: [1, 6], band: { rows: [3, 4], ch: 'm', back: true }, tail: { ch: 'Y', len: 4 } },
   },
 };
 
 function buildPet(def, s = 0.09) {
-  const rows = def.rows, H = rows.length, W = Math.max(...rows.map((r) => r.length));
-  const at = (i, j) => (j >= 0 && j < H && i >= 0 && i < W && rows[j][i] && rows[j][i] !== '.');
-  // Distance (in squares) from each filled square to the nearest empty one.
-  const dist = rows.map((r) => [...Array(W)].map(() => 0));
-  const q = [];
+  const rows = def.rows, sh = def.shape, H = rows.length, W = Math.max(...rows.map((r) => r.length));
+  const [h0, h1] = sh.head, D = sh.depth || 9, thin = sh.thin || '';
+  const legRow = H - 1, kc = -Math.floor((D - 1) / 2);              // middle of the head, front to back
+  const ch = (i, j) => (j >= 0 && j < H && i >= 0 && i < W && rows[j][i] && rows[j][i] !== '.' ? rows[j][i] : null);
+  const isHead = (i, j) => j >= h0 && j <= h1 && ch(i, j) && !thin.includes(ch(i, j));
+  // The front-to-back span [k0, k1] (k1 nearer the back, both <= 0) of the
+  // column of blocks behind each square of the drawing.
+  const span = (i, j) => {
+    const c = ch(i, j);
+    if (!c) return null;
+    if (thin.includes(c)) return [-2, -3];                             // floppy ears
+    if (j < h0) return sh.top === 'mohawk' ? [-1, 2 - D] : [-2, -3];   // ears, or a crest front to back
+    if (j <= h1) return [0, 1 - D];
+    if (j < legRow) return [kc + 2, kc - 2];                           // body
+    return [kc + 1, kc - 1];                                           // legs
+  };
+  const vox = new Map(), key = (i, j, k) => `${i},${j},${k}`;
+  const put = (i, j, k, c) => vox.set(key(i, j, k), c);
+  const mid = (h0 + h1) / 2;
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-    if (!at(i, j)) continue;
-    const edge = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => !at(i + a, j + b));
-    if (edge) { dist[j][i] = 1; q.push([i, j]); }
-  }
-  for (let h = 0; h < q.length; h++) {
-    const [i, j] = q[h];
-    for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const x = i + a, y = j + b;
-      if (at(x, y) && !dist[y][x]) { dist[y][x] = dist[j][i] + 1; q.push([x, y]); }
+    const sp = span(i, j);
+    if (!sp) continue;
+    const head = isHead(i, j);
+    const side = head && (!isHead(i - 1, j) || !isHead(i + 1, j));
+    const top = head && !isHead(i, j - 1);
+    for (let k = sp[0]; k >= sp[1]; k--) {
+      if (head && k === 1 - D && (side || top)) continue;               // round off the back edges
+      let c = ch(i, j);
+      if (k < 0) c = def.inside[c] || c;
+      if (head && k < 0) {
+        if (sh.coat && k <= -3) c = sh.coat;
+        for (const [pc, [a, b]] of Object.entries(sh.patches || {})) {
+          if (k <= kc && j < mid && i >= a && i <= b) c = pc;
+        }
+        const back = k <= 2 - D;
+        if (sh.drape && j >= sh.drape.rows[0] && j <= sh.drape.rows[1] && back) c = ch(i, sh.drape.from) || c;
+        const band = sh.band;
+        if (band && band.rows.includes(j) && ((side && k >= -(band.to || D)) || (band.back && k === 1 - D))) c = band.ch;
+      }
+      put(i, j, k, c);
     }
   }
-  const depth = (i, j) => Math.round(3 + Math.min(dist[j][i], 4) * 1.5);   // squares of thickness
-  const solid = (i, j, k) => at(i, j) && k <= 0 && k > -depth(i, j);
-  const colorOf = (i, j, k) => {
-    let ch = rows[j][i];
-    if (k < 0) ch = def.inside[ch] || ch;
-    if (k === 1 - depth(i, j)) ch = def.back[ch] || ch;
-    return def.pal[ch];
-  };
+  // The tail: two squares wide, out of the back of the body and straight up.
+  if (sh.tail) {
+    const t = sh.tail, i0 = Math.floor((W - 2) / 2), j0 = legRow - 1;
+    for (let n = 0; n < t.len; n++) {
+      const j = j0 - n - (t.puff ? 0 : 1), k = kc - 3 - Math.min(n, 1);
+      for (let di = 0; di < 2; di++) for (let dj = 0; dj < (t.puff ? 2 : 1); dj++) put(i0 + di, j - dj, k, t.ch);
+    }
+  }
   const P = [], Nn = [], C = [], col = new THREE.Color();
   const FACES = [
     { d: [1, 0, 0], c: [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]] },
@@ -772,19 +799,17 @@ function buildPet(def, s = 0.09) {
     { d: [0, 0, 1], c: [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]] },
     { d: [0, 0, -1], c: [[1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]] },
   ];
-  const zMid = 5;   // centre the thickness roughly
-  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-    if (!at(i, j)) continue;
-    for (let k = 0; k > -depth(i, j); k--) {
-      col.set(colorOf(i, j, k));
-      for (const f of FACES) {
-        // grid j grows downward; world y grows upward
-        if (solid(i + f.d[0], j - f.d[1], k + f.d[2])) continue;
-        const quad = f.c.map(([a, b, c]) => [
-          (i + a - W / 2) * s, (H - 1 - j + b) * s, (k + c - 1 + zMid) * s]);
-        for (const idx of [0, 1, 2, 0, 2, 3]) {
-          P.push(...quad[idx]); Nn.push(...f.d); C.push(col.r, col.g, col.b);
-        }
+  const zMid = 5;   // keeps the face where it always was over the kart
+  for (const [kk, c] of vox) {
+    const [i, j, k] = kk.split(',').map(Number);
+    col.set(def.pal[c]);
+    for (const f of FACES) {
+      // grid j grows downward; world y grows upward
+      if (vox.has(key(i + f.d[0], j - f.d[1], k + f.d[2]))) continue;
+      const quad = f.c.map(([a, b, cz]) => [
+        (i + a - W / 2) * s, (H - 1 - j + b) * s, (k + cz - 1 + zMid) * s]);
+      for (const idx of [0, 1, 2, 0, 2, 3]) {
+        P.push(...quad[idx]); Nn.push(...f.d); C.push(col.r, col.g, col.b);
       }
     }
   }
