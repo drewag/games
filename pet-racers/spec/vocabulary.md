@@ -9,7 +9,7 @@ first column is the one you want.
 | Rival | A pet driven by the computer; it uses items too | racers.md | opponent, AI, CPU, enemy, bot |
 | Kart | The food-shaped vehicle a pet rides | racers.md | car, vehicle |
 | Power | A pet's own special move, one of the items | racers.md | ability, special, super |
-| Item | What a snack gives: Banana Peel, Cherry, Hot Pepper, or the pet's power | play.md | ability, pickup, weapon |
+| Item | What a snack gives: Banana Peel, Cherry, Bee, Hot Pepper, the rare Star, or the pet's power | play.md | ability, pickup, weapon |
 | Spare | The second item held in reserve; tap to swap | play.md | reserve, backup, slot 2 |
 | Fork | Where the road splits in two and joins again further on | play.md | split, junction, intersection |
 | Branch | The second road at a fork | play.md | alternate route, side path, shortcut path |

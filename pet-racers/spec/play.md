@@ -140,24 +140,54 @@ color; yours is the biggest, ringed in white. After the third lap, a card shows 
 
 Snacks float over the track in rows across it: tacos, sushi, ramen, popcorn, burgers and fries, mixed.
 Driving through one eats it, and it comes back a few seconds later. Eating a snack gives an
-**item**, which flickers through the choices on the Item button for a moment before it
-lands. You can hold two: the one in hand and a **spare**. A snack fills the hand if it's
-empty, otherwise the spare; with both full, it's just a snack. Using the item in hand moves
+**item**, which spins through the choices on its button for 3 seconds, slowing down like
+a slot machine, before it lands. While it spins, the item can't be used or swapped, and
+snacks you drive through give nothing more: they're still eaten, so nobody else gets
+them. You can hold two: the one in hand and a **spare**. A snack fills the hand if it's
+empty, otherwise the spare; with both full, it's just a snack. If the spare is the one
+spinning, the item in hand can still be used, and the spare moves up still spinning. Using the item in hand moves
 the spare up, and tapping the spare swaps them, to save the power for later.
 
 The items:
 
 - 🍌 **Banana Peel**: dropped behind the kart. The first kart to drive over it spins out
   ("Slip!"), and that includes you, so remember where you left it. Peels last 40 seconds.
-- 🍒 **Cherry**: thrown straight down the road, fast, on the line you're driving. It
-  spins out the first kart it touches, or pops after 3 seconds. Aim by lining up.
+- 🍒 **Cherry**: thrown fast, the way your kart is pointing. Pointing down the road, it
+  goes straight down your line; at an angle, it bounces off the border, three times,
+  and pops on the fourth (or after 4 seconds). It spins out the first kart it touches.
+  Aim by lining up, or bank it off the walls.
+- 🐝 **Bee**: flies after the kart one place ahead of you, wherever it is, turning to
+  follow it and straight over hedges and grass rather than along the road. Faster than
+  any kart, it stings ("Stung!") the first kart it touches, or gives up after 10 seconds.
 - 🌶️ **Hot Pepper**: a boost, like a drift's but longer. It ignores the grass slowdown, so
   it's good for a short cut.
+- ⭐ **Star**: rare, and the strongest item. For 5 seconds the kart goes as fast as Speed
+  Eating's sugar rush and is brave as in Brave Mode at once: it ignores the slowdown off
+  the road, can't be spun out, spins out whoever it touches, and sparkles in rainbow
+  colors. It never comes up in the top three, and mostly in 8th and 9th.
 - ★ **Your pet's power** (see [racers](racers.md#powers)). A favorite food gives it half the
   time; any other snack gives it now and then.
 
-Further back in the race, the power and the Hot Pepper come up more often and the peel less,
-so whoever's behind gets the help.
+What a snack gives depends on your place. The aim is a race that spreads out but keeps
+changing: the leader can defend but not run away, the middle can fight, and the back can
+catch up.
+
+| Place | Peel | Cherry | Bee | Pepper | Star | Power |
+|---|---|---|---|---|---|---|
+| 1st | 78% | – | – | 9% | – | 13% |
+| 2nd | 49% | 16% | 6% | 12% | – | 15% |
+| 3rd | 36% | 24% | 10% | 14% | – | 16% |
+| 4th | 25% | 25% | 12% | 18% | 2% | 18% |
+| 5th | 19% | 25% | 13% | 19% | 4% | 19% |
+| 6th | 13% | 22% | 15% | 22% | 7% | 21% |
+| 7th | 9% | 20% | 15% | 24% | 10% | 21% |
+| 8th | 5% | 15% | 13% | 24% | 21% | 22% |
+| 9th | 2% | 11% | 13% | 24% | 26% | 23% |
+
+A favorite food makes the power three times as likely. In first place, a power that
+shoots at someone ahead (Sports Ball, Math Defeater, Mind Access) never comes up, and one
+that speeds you along (Speed Eating, Brave Mode, Instant Hacking) comes up less. With
+friends in the race, the places are the same nine.
 
 Duffy still gets a nibble boost from every snack.
 
@@ -166,9 +196,11 @@ Duffy still gets a nibble boost from every snack.
 Rivals eat snacks too, which takes them away from you, and each snack gives a rival an
 item the same way (favorites and place count the same), but a rival holds only one at a
 time and has no spare. They use them sensibly rather than at random: a peel or a cake
-when someone is close behind, a cherry when someone is ahead in their lane, a Sports Ball
+when someone is close behind, a cherry when someone is ahead in their lane, a bee when
+anyone is ahead within 150 units, a Sports Ball
 or Math Defeater when someone is ahead, Gaming Knockout in a crowd, Fashion Shoot with
-someone just behind, and the pepper, Speed Eating and Brave Mode whenever. A rival that
+someone just behind, and the pepper, the Star, Speed Eating and Brave Mode whenever. A
+rival's item spins for 3 seconds too before they can use it. A rival that
 can't find a good moment uses its item after ten seconds anyway. After using one, a rival
 waits a few seconds before the next: 4 on the harder tracks, 7 on the easy ones.
 
@@ -189,7 +221,7 @@ Everything you hear is made by the game as it plays (Web Audio, no sound files),
 works offline. While racing there's an engine hum that rises with speed, a tire squeal
 while drifting and a rumble off the road. Short sounds mark the countdown beeps and GO,
 eating a snack (a fanfare for a favorite), the item roulette and where it lands (a chime
-for the power), boost pads, slipping on a peel, each item and each power
+for the power or the Star), boost pads, slipping on a peel, each item and each power
 (every one sounds different), spinning someone out, getting spun out, hitting the
 border, bumping a kart, each lap (a jingle for the last one) and the finish (a bigger
 one for winning). Pro driving adds the hop, a blip as the sparks change color, the boost

@@ -60,7 +60,9 @@
   #power b, #spare b { display: block; font-size: 40px; font-weight: normal; line-height: 1.1; }
   #power.ready { opacity: 1; background: #fffdf6; }
   #power.special { background: #ffe58a; animation: pulse 0.6s ease-in-out infinite alternate; }
-  #power.rolling b { animation: roll 0.12s steps(2) infinite; }
+  #power.rolling b, #spare.rolling b { animation: roll 0.12s steps(2) infinite; }
+  #power.star { background: #fff3a0; animation: pulse 0.4s ease-in-out infinite alternate; }
+  #spare.star { background: #fff3a0; }
   @keyframes roll { to { transform: translateY(-4px) rotate(8deg); } }
   #spare { width: 72px; height: 72px; align-self: start; font-size: 13px; line-height: 1; text-align: center; opacity: 0.45; }
   #spare b { font-size: 30px; }
@@ -976,7 +978,7 @@ for (const r of RACERS) {
   Object.assign(r, {
     pos: new V3(), heading: 0, speed: 0, spin: 0, spinAngle: 0,
     s: 0, lat: 0, skill: 0.9, phase: 0,                                     // rivals
-    steer: 0, idx: 0, lap: 1, item: null, spare: null, rollT: 0, wallCd: 0, rush: 0, nibble: 0, brave: 0,  // people
+    steer: 0, idx: 0, lap: 1, item: null, spare: null, rollT: 0, rollSlot: 'item', wallCd: 0, rush: 0, nibble: 0, brave: 0,  // people
     padT: 0, padCd: 0,                                                      // boost pads
     path: null, pf: 0, plat: 0, bs: 0, s0: 0, netBs: 0, airY: 0, vy: 0,     // branches and jumps
     sunk: 0, sunkIn: null, fails: null,
@@ -2064,7 +2066,23 @@ function addBall(owner, id, f, lat, latVel, kind = 'ball', pi = 0) {
   const m = mesh(cherry ? cherryGeo : ballGeo);
   m.scale.setScalar(cherry ? 1 : 0.6);
   scene.add(m);
-  balls.push({ id, owner, m, life: cherry ? 3 : 5, f, lat, latVel, speed: cherry ? 54 : 42, cherry, path: BRANCHES[pi - 1] || MAIN });
+  balls.push({ id, owner, m, life: cherry ? 4 : 5, f, lat, latVel, speed: cherry ? 54 : 42, cherry, bounces: 0, path: BRANCHES[pi - 1] || MAIN });
+}
+// The Bee: flies at its target, turning toward it, over hedges and grass.
+const BEE_SPEED = 40, BEE_TURN = 3.2;
+const beeGeo = merge([
+  place(paint(sphere(10, 7), (x, y, z) => (Math.floor((z + 1) * 2.5) % 2 ? '#2a2228' : '#ffcf3f')), { s: [0.45, 0.42, 0.65] }),
+  place(paint(sphere(8, 5), '#ffffff'), { p: [0.42, 0.38, -0.05], r: [0, 0, -0.5], s: [0.45, 0.08, 0.3] }),
+  place(paint(sphere(8, 5), '#ffffff'), { p: [-0.42, 0.38, -0.05], r: [0, 0, 0.5], s: [0.45, 0.08, 0.3] }),
+  place(paint(sphere(6, 4), '#2a2228'), { p: [0, 0.05, 0.62], s: [0.22, 0.22, 0.18] }),
+]);
+const bees = [];
+function addBee(owner, id, x, z, h, target) {
+  const m = mesh(beeGeo);
+  m.scale.setScalar(1.3);
+  m.position.set(x, 1.3, z);
+  scene.add(m);
+  bees.push({ id, owner, m, life: 10, h, target: racerNamed(target) || null });
 }
 function addPeel(owner, id, x, z) {
   const m = mesh(peelGeo);
@@ -2118,13 +2136,13 @@ function removeFx(list, k) {
   list.splice(k, 1);
 }
 function removeFxById(id) {
-  for (const list of [balls, cakes, pluses, peels]) {
+  for (const list of [balls, cakes, pluses, peels, bees]) {
     const k = list.findIndex((o) => o.id === id);
     if (k >= 0) removeFx(list, k);
   }
 }
 function clearFx() {
-  for (const list of [balls, cakes, pluses, rings, peels]) while (list.length) removeFx(list, 0);
+  for (const list of [balls, cakes, pluses, rings, peels, bees]) while (list.length) removeFx(list, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -2268,6 +2286,8 @@ const SFX = {
   'Sports Ball': () => { noise(0, 0.08, 0.15, 800); tone(200, 0, 0.15, 'triangle', 0.1, 90); },
   'Instant Cake': () => { tone(700, 0, 0.08, 'sine', 0.1, 1400); tone(1047, 0.1, 0.25, 'triangle', 0.07); },
   'Brave Mode': () => [392, 523, 659, 784].forEach((f, i) => tone(f, i * 0.09, i === 3 ? 0.4 : 0.1, 'square', 0.06)),
+  Bee: () => { tone(220, 0, 0.5, 'sawtooth', 0.04, 260); tone(233, 0.05, 0.45, 'sawtooth', 0.03, 250); },
+  Star: () => [523, 659, 784, 1047, 784, 1047, 1319, 1568].forEach((f, i) => tone(f, i * 0.07, i === 7 ? 0.5 : 0.08, 'square', 0.05)),
   'Math Defeater': () => tone(1500, 0, 0.35, 'square', 0.05, 300),
   'Instant Hacking': () => [0, 0.05, 0.1, 0.15, 0.2, 0.25].forEach((d) => tone(300 + Math.random() * 1200, d, 0.05, 'square', 0.05)),
   'Fashion Shoot': () => { noise(0, 0.05, 0.2, 4000, 'highpass'); tone(2000, 0.05, 0.3, 'sine', 0.05, 600); },
@@ -2311,7 +2331,7 @@ function resetRace() {
     trackPoint(f, lat, r.pos);
     Object.assign(r, { heading: headingAt(f), speed: 0, spin: 0, spinAngle: 0,
       s: (f / N) * TL, lat, netS: (f / N) * TL, netLat: lat, skill: skills[k] || 0.9, phase: k * 1.7,
-      steer: 0, idx: Math.floor(wrap(f)), lap: 0, item: null, spare: null, rollT: 0, rush: 0, nibble: 0, brave: 0, remote: null,
+      steer: 0, idx: Math.floor(wrap(f)), lap: 0, item: null, spare: null, rollT: 0, rollSlot: 'item', rush: 0, nibble: 0, brave: 0, remote: null,
       padT: 0, padCd: 0, path: MAIN, pf: Math.floor(wrap(f)), plat: lat, bs: 0, s0: 0, netBs: 0, airY: 0, vy: 0, sunk: 0, sunkIn: null, fails: null,
       itemCd: 0, think: 0, held: 0,
       hopT: 0, hopY: 0, hopHeld: false, drift: 0, driftLv: 0, driftYaw: 0, charge: 0, boost: 0, stall: 0, gasAt: null });
@@ -2797,37 +2817,71 @@ function updateSnacks(dt, t) {
 }
 
 // Every snack gives an item, if there's a free slot: the one in hand, then the
-// spare. A favorite food gives the pet's Power half the time, any other snack
-// now and then. Further back in the race, the Power and the Hot Pepper come up
-// more and the peel less.
+// spare. What it gives depends on your place (ITEM_ODDS), to spread the race
+// out but keep places changing: the leader gets mostly peels to defend with,
+// no cherries and few boosts; the middle gets cherries to fight with; the back
+// gets boosts and Stars to catch up. A favorite food makes the pet's Power
+// three times as likely.
+//
+// The item spins through the choices for ROLL_TIME before it lands. Snacks
+// eaten meanwhile give nothing, but they're still gone for everyone else.
+const ROLL_TIME = 3;
 const ITEMS = {
   'Banana Peel': { icon: '🍌', label: 'Banana<br>Peel' },
   Cherry: { icon: '🍒', label: 'Cherry' },
+  Bee: { icon: '🐝', label: 'Bee' },
   'Hot Pepper': { icon: '🌶️', label: 'Hot<br>Pepper' },
+  Star: { icon: '⭐', label: 'Star' },
   power: { icon: '★', label: '' },                       // the pet's Power
 };
+const STAR_TIME = 5;
+const RAINBOW = ['#e53935', '#ff8a1c', '#ffcf3f', '#4caf50', '#3b7dd8', '#a58ad8'];                                     // seconds of Star: fast and brave
+const ODDS_OF = ['Banana Peel', 'Cherry', 'Bee', 'Hot Pepper', 'Star', 'power'];
+const ITEM_ODDS = [
+  //  Peel Cherry Bee Pepper Star Power
+  [70, 0, 0, 8, 0, 12],      // 1st
+  [48, 16, 6, 12, 0, 15],    // 2nd
+  [36, 24, 10, 14, 0, 16],   // 3rd
+  [26, 26, 12, 18, 2, 18],   // 4th
+  [20, 26, 14, 20, 4, 20],   // 5th
+  [14, 24, 16, 24, 7, 22],   // 6th
+  [10, 22, 16, 26, 11, 23],  // 7th
+  [5, 16, 14, 26, 22, 24],   // 8th
+  [2, 12, 14, 26, 28, 25],   // 9th
+];
+// In the lead, powers that shoot at someone ahead never come up, and the ones
+// that speed you along come up less.
+const POWER_KIND = {
+  'Sports Ball': 'shoot', 'Math Defeater': 'shoot', 'Mind Access': 'shoot',
+  'Speed Eating': 'boost', 'Brave Mode': 'boost', 'Instant Hacking': 'boost',
+};
+function itemOdds(me, food) {
+  const row = Math.round(((placeOf(me) - 1) / (RACERS.length - 1)) * (ITEM_ODDS.length - 1));
+  const w = [...ITEM_ODDS[row]];
+  if ([].concat(me.food).includes(food)) w[5] *= 3;
+  if (row === 0) w[5] *= { shoot: 0, boost: 0.4 }[POWER_KIND[me.power]] ?? 1;
+  return w;
+}
 function rollItem(food, me = player) {
-  const fav = [].concat(me.food).includes(food);
-  const back = (placeOf(me) - 1) / (RACERS.length - 1);       // 0 in front, 1 at the back
-  if (Math.random() < (fav ? 0.5 : 0.1 + back * 0.25)) return 'power';
-  const w = [['Banana Peel', 1.2 - back * 0.8], ['Cherry', 1], ['Hot Pepper', 0.5 + back * 0.9]];
-  let k = Math.random() * w.reduce((a, [, n]) => a + n, 0);
-  for (const [name, n] of w) if ((k -= n) < 0) return name;
-  return 'Cherry';
+  const w = itemOdds(me, food);
+  let k = Math.random() * w.reduce((a, n) => a + n, 0);
+  for (let i = 0; i < w.length; i++) if ((k -= w[i]) < 0) return ODDS_OF[i];
+  return 'Banana Peel';
 }
 function eat(food) {
   const favs = [].concat(player.food);
   sfx(favs.includes(food) ? 'fav' : 'snack');
   if (player.name === 'Duffy') player.nibble = 0.6;     // Speed Eating: every bite helps
   if (state !== 'race') return;
-  if (!player.item) { player.item = rollItem(food); player.rollT = 0.6; }
-  else if (!player.spare) { player.spare = rollItem(food); sfx(player.spare === 'power' ? 'full' : 'got'); }
+  if (player.rollT > 0) return;                        // still spinning: this one's just a snack
+  if (!player.item) Object.assign(player, { item: rollItem(food), rollT: ROLL_TIME, rollSlot: 'item' });
+  else if (!player.spare) Object.assign(player, { spare: rollItem(food), rollT: ROLL_TIME, rollSlot: 'spare' });
 }
 function rivalEat(r, food) {
   if (state !== 'race' || r.item) return;
   r.item = rollItem(food, r);
   r.held = 0;
-  r.think = 0.6 + Math.random();
+  r.think = ROLL_TIME + Math.random();                  // a rival's item spins too
 }
 // Tap the spare to swap it with the item in hand.
 function swapItems() {
@@ -2873,9 +2927,12 @@ const BASICS = {
     send({ t: 'fx', k: 'peel', o: me.name, id, x: at.x, z: at.z });
     say(me, 'Peel!');
   },
+  // Thrown the way the kart is pointing; it bounces off the border a few times.
   Cherry(me) {
-    const b = { id: newId(me), ...throwFrom(me), latVel: 0, kind: 'cherry' };
-    addBall(me, b.id, b.f, b.lat, 0, 'cherry', b.pi);
+    const at = throwFrom(me), { path } = placeOnRoad(me);
+    const rel = angleTo(pathHeading(path, at.f), me.heading);
+    const b = { id: newId(me), ...at, latVel: THREE.MathUtils.clamp(-Math.sin(rel) * 54, -30, 30), kind: 'cherry' };
+    addBall(me, b.id, b.f, b.lat, b.latVel, 'cherry', b.pi);
     send({ t: 'fx', k: 'ball', o: me.name, ...b });
     say(me, 'Cherry!');
   },
@@ -2884,6 +2941,21 @@ const BASICS = {
     if (!isHuman(me)) me.padT = Math.max(me.padT, 1.6);
     for (let k = 0; k < 8; k++) puff(me.pos.clone().setY(0.6).addScaledVector(fwdOf(me), -1.4), k % 2 ? '#e53935' : '#ff8a1c', 0.5);
     say(me, 'Hot hot hot!');
+  },
+  // Flies after the kart one place ahead, straight at it, over anything in the way.
+  Bee(me) {
+    const ahead = nextAhead(me, TL);
+    const at = me.pos.clone().addScaledVector(fwdOf(me), 2.5);
+    const b = { id: newId(me), x: at.x, z: at.z, h: me.heading, target: ahead ? ahead.r.name : '' };
+    addBee(me, b.id, b.x, b.z, b.h, b.target);
+    send({ t: 'fx', k: 'bee', o: me.name, ...b });
+    say(me, ahead ? `Bzzz! After ${ahead.r.name}!` : 'Bzzz!');
+  },
+  // Anyone's, and rare: Speed Eating's sugar rush and Brave Mode at once.
+  Star(me) {
+    me.rush = Math.max(me.rush, STAR_TIME);
+    me.brave = Math.max(me.brave, STAR_TIME);
+    say(me, 'Superstar!');
   },
 };
 
@@ -2975,9 +3047,10 @@ function useItem(me, it) {
 // Use the item in hand; the spare moves up into its place.
 function usePower() {
   const it = player.item;
-  if (!it || player.rollT > 0 || state !== 'race') return;
-  player.item = player.spare;
+  if (!it || (player.rollT > 0 && player.rollSlot === 'item') || state !== 'race') return;
+  player.item = player.spare;                           // a spare still spinning moves up spinning
   player.spare = null;
+  player.rollSlot = 'item';
   useItem(player, it);
 }
 
@@ -3009,8 +3082,9 @@ function wantsTo(r, it) {
   switch (name) {
     case 'Banana Peel': case 'Instant Cake': return nextBehind(r, 15);
     case 'Cherry': return inLane;
+    case 'Bee': return !!nextAhead(r, 150);
     case 'Sports Ball': return !!ahead;
-    case 'Hot Pepper': case 'Speed Eating': case 'Brave Mode': return r.held > 1.5;
+    case 'Hot Pepper': case 'Speed Eating': case 'Brave Mode': case 'Star': return r.held > 1.5;
     case 'Gaming Knockout': return othersOf(r).some((o) => o.pos.distanceTo(r.pos) < 10);
     case 'Math Defeater': case 'Instant Hacking': return !!nextAhead(r, 50);
     case 'Mind Access': return !!close || !!ahead;
@@ -3042,7 +3116,11 @@ function updateEffects(dt, t) {
   for (const r of RACERS) {                           // sugar rush and brave sparkles
     const behind = r.pos.clone().setY(0.4).addScaledVector(fwdOf(r), -1.2);
     if (r.rush > 0 && Math.random() < dt * 20) puff(behind, r.color, 0.4);
-    if (r.brave > 0 && Math.random() < dt * 24) puff(behind.setY(0.4 + Math.random()), r.color, 0.5);
+    // A Star (rush and brave at once) sparkles in rainbow colors.
+    const star = r.brave > 0 && r.rush > 0;
+    if (r.brave > 0 && Math.random() < dt * (star ? 40 : 24)) {
+      puff(behind.setY(0.4 + Math.random()), star ? RAINBOW[Math.floor(Math.random() * RAINBOW.length)] : r.color, 0.5);
+    }
     if (r.drift && r.driftLv && Math.random() < dt * 40) {        // drift sparks at the back wheels
       const side = new V3(Math.cos(r.heading), 0, -Math.sin(r.heading)).multiplyScalar(Math.random() < 0.5 ? 0.8 : -0.8);
       puff(behind.clone().setY(0.25).add(side), SPARKS[r.driftLv - 1].color, 0.25);
@@ -3062,9 +3140,10 @@ function updateEffects(dt, t) {
     if (Math.abs(b.lat) > edge) {                      // bounce off the hedges
       b.lat = Math.sign(b.lat) * edge;
       b.latVel *= -1;
+      b.bounces++;
       puff(b.m.position.clone());
     }
-    b.latVel *= Math.pow(0.6, dt);
+    if (!b.cherry) b.latVel *= Math.pow(0.6, dt);       // a cherry keeps going until it's bounced 3 times
     pathPoint(b.path, b.f, b.lat, b.m.position).setY(0.6);
     if (b.cherry) b.m.rotation.y += dt * 14;
     else b.m.rotation.x += dt * 20;
@@ -3074,10 +3153,35 @@ function updateEffects(dt, t) {
         if (r.pos.distanceTo(b.m.position.clone().setY(0)) < 1.8 && r.airY < 0.6 && spinOut(r, 'Bonk!', b.owner)) { hit = true; break; }
       }
     }
-    if (hit || b.life <= 0) {
+    if (hit || b.life <= 0 || (b.cherry && b.bounces > 3)) {
       if (hit) send({ t: 'gone', id: b.id });
       puff(b.m.position.clone(), b.owner.color);
       removeFx(balls, k);
+    }
+  }
+  for (let k = bees.length - 1; k >= 0; k--) {
+    const b = bees[k], tg = b.target;
+    b.life -= dt;
+    if (tg) {                                           // turn toward the target, harder when close
+      const d = tg.pos.clone().sub(b.m.position).setY(0), close = d.length() < 14;
+      const turn = angleTo(b.h, Math.atan2(d.x, d.z));
+      b.h += Math.sign(turn) * Math.min(Math.abs(turn), (close ? 3 : 1) * BEE_TURN * dt);
+    }
+    b.m.position.x += Math.sin(b.h) * BEE_SPEED * dt;
+    b.m.position.z += Math.cos(b.h) * BEE_SPEED * dt;
+    b.m.position.y = 1.3 + Math.sin(t * 12 + k) * 0.25;
+    b.m.rotation.y = b.h;
+    if (Math.random() < dt * 10) puff(b.m.position.clone(), '#ffe58a', 0.25);
+    let hit = false;
+    if (owns(b.owner)) {
+      for (const r of othersOf(b.owner)) {
+        if (r.pos.distanceTo(b.m.position.clone().setY(0)) < 2 && r.airY < 1.5 && spinOut(r, 'Stung!', b.owner)) { hit = true; break; }
+      }
+    }
+    if (hit || b.life <= 0) {
+      if (hit) send({ t: 'gone', id: b.id });
+      puff(b.m.position.clone(), '#ffcf3f');
+      removeFx(bees, k);
     }
   }
   for (let k = peels.length - 1; k >= 0; k--) {
@@ -3365,6 +3469,7 @@ function showFx(m) {
   if (m.k === 'ball') addBall(owner, m.id, m.f, m.lat, m.latVel, m.kind, m.pi);
   if (m.k === 'peel') addPeel(owner, m.id, m.x, m.z);
   if (m.k === 'cake') addCake(owner, m.id, m.x, m.z);
+  if (m.k === 'bee') addBee(owner, m.id, m.x, m.z, m.h, m.target);
   if (m.k === 'plus') addPlus(owner, m.id, m.f, m.lat, m.target, m.x, m.z);
   if (m.k === 'hack') hackFx(owner, new V3(m.x, 0, m.z), new V3(m.x2, 0, m.z2));
   if (m.k === 'flash') flashFx(owner);
@@ -3781,23 +3886,31 @@ function updateHud(dt) {
   updateMap();
   $('hud').textContent = `Lap ${Math.min(Math.max(player.lap, 1), LAPS)}/${LAPS}  ·  ${ORDINAL[placeOf(player)]}`;
   const me = player;
+  // The item spins through the choices before it lands, slowing down as it
+  // goes, like a slot machine.
+  const spin = (t) => { const e = ROLL_TIME - t; return Math.floor(16 * e - 2.2 * e * e); };
   if (me.rollT > 0) {
-    // The item spins through the choices before it lands.
     const before = me.rollT;
     me.rollT = Math.max(0, me.rollT - dt);
-    if (Math.floor(before * 14) !== Math.floor(me.rollT * 14)) sfx('roll');
-    if (me.rollT === 0) sfx(me.item === 'power' ? 'full' : 'got');
+    if (spin(before) !== spin(me.rollT)) sfx('roll');
+    if (me.rollT === 0) { const it = me[me.rollSlot]; sfx(it === 'power' || it === 'Star' ? 'full' : 'got'); }
   }
+  const icons = Object.values(ITEMS).map((i) => i.icon);
+  const rolling = (slot) => me.rollT > 0 && me.rollSlot === slot;
+  const spinning = `<b>${icons[spin(me.rollT) % icons.length]}</b>`;
   const show = (it) => it === 'power' ? `<b>★</b>${player.power.replace(' ', '<br>')}!` : it ? `<b>${ITEMS[it].icon}</b>${ITEMS[it].label}` : '';
-  const shown = me.rollT > 0 ? `<b>${Object.values(ITEMS)[Math.floor(me.rollT * 14) % 4].icon}</b>` : show(me.item);
+  const shown = rolling('item') ? spinning : show(me.item);
   if ($('power').dataset.shown !== shown) { $('power').innerHTML = shown; $('power').dataset.shown = shown; }
   $('power').classList.toggle('ready', !!me.item);
-  $('power').classList.toggle('rolling', me.rollT > 0);
-  $('power').classList.toggle('special', me.item === 'power' && me.rollT <= 0);
-  const spare = me.spare === 'power' ? '<b>★</b>' : me.spare ? `<b>${ITEMS[me.spare].icon}</b>` : 'spare';
+  $('power').classList.toggle('rolling', rolling('item'));
+  $('power').classList.toggle('special', me.item === 'power' && !rolling('item'));
+  $('power').classList.toggle('star', me.item === 'Star' && !rolling('item'));
+  const spare = rolling('spare') ? spinning : me.spare === 'power' ? '<b>★</b>' : me.spare ? `<b>${ITEMS[me.spare].icon}</b>` : 'spare';
   if ($('spare').dataset.shown !== spare) { $('spare').innerHTML = spare; $('spare').dataset.shown = spare; }
   $('spare').classList.toggle('ready', !!me.spare);
-  $('spare').classList.toggle('special', me.spare === 'power');
+  $('spare').classList.toggle('rolling', rolling('spare'));
+  $('spare').classList.toggle('special', me.spare === 'power' && !rolling('spare'));
+  $('spare').classList.toggle('star', me.spare === 'Star' && !rolling('spare'));
 }
 
 $('go').addEventListener('click', startRace);
@@ -3877,7 +3990,7 @@ window.autoUpdateIsIdle = () => (state === 'title' || state === 'done') && !net.
 
 // For testing from the console.
 window.petRacers = {
-  RACERS, TRACKS, trackPoint, headingAt, chooseTrack, input, setPro, startRace, usePower, swapItems, eat, pick, placeOf, progressOf, cakes, balls, pluses, peels, net, makeRoom, joinRoom, leaveRoom,
+  RACERS, TRACKS, trackPoint, headingAt, chooseTrack, input, setPro, startRace, usePower, swapItems, eat, rollItem, itemOdds, pick, placeOf, progressOf, cakes, balls, pluses, peels, bees, net, makeRoom, joinRoom, leaveRoom,
   get branches() { return BRANCHES; }, get ramps() { return RAMPS; },
   balance: () => TRACKS.flatMap((d) => { loadTrack(d); return BRANCHES.map((b, k) => ({ track: d.name, branch: k + 1,
     kind: b.gaps.length ? `${b.gaps.length} × ${b.hazard}` : `${b.padAt.length} pads`, saved: +b.saved.toFixed(2),

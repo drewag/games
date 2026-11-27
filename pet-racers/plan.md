@@ -30,6 +30,8 @@ match it.
 - [x] Best time on each track, kept on the iPad
 - [x] Long tracks: Beach, Farm, Jungle, about twice round, with long alternate roads and a three-way fork
 - [x] A drawn picture of each track on the pick screen
+- [x] The Star: a rare item, sugar rush and Brave Mode at once; items spin for 3 seconds
+- [x] Item odds by place; cherries bounce off the border; the Bee chases the kart ahead
 
 ## Next
 
@@ -39,6 +41,9 @@ match it.
 - [ ] Items on the iPad: odds of the power, peel and cherry sizes, where the Spare button sits
 - [ ] Forks and jumps on the iPad: are the forks easy to see coming? Are the hazard costs
   (1.6 s rough, 3 s water) right? Do kids hit the side ramps, or need them wider?
+- [ ] The Star and the 3-second spin on the iPad: does the longer spin feel slow?
+- [ ] Item odds by place: does the race spread out but keep changing? Is the Bee too strong
+  (speed 40, 10 s)? Tune `ITEM_ODDS`
 - [ ] Rivals' items on the iPad: too mean for Zachary on the easy tracks? Tune the wait between items
 - [ ] Easy driving without steering help: can Zachary get round? If not, set `STEERING_HELP` back on
 - [ ] Long tracks on the iPad: is a three-lap race (about 4–5 minutes) too long? Frame rate with
