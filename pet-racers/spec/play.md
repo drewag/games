@@ -25,6 +25,23 @@ The **harder tracks** have more and tighter corners (hairpins on Snow, zig-zags 
 Bakery, both in the Toy Room), a narrower road, a bigger slowdown off it, and rivals a
 little quicker (2–4%). Hedges, catch-up and everything else work the same.
 
+Every track but the Park has **forks** and **jumps**:
+
+| Track | Forks | Jumps on the main road |
+|---|---|---|
+| Park | none | none |
+| Backyard | a shortcut through the garden, over long grass | one on the long diagonal |
+| Kitchen | two boost lanes, round the outside of the right-hand wiggle and of the bottom dip | one on the top straight |
+| Snow | a shortcut across the bottom-left corner, over an icy creek | one on the middle straight, after a boost pad |
+| Bakery | a boost lane past the top zig-zags, and a shortcut across the top-right corner over syrup | one on the left side |
+| Toy Room | two narrow shortcuts, across the bulge in the hook and across the neck of the bottom-right loop, each over bath water | one on the first straight |
+
+No road is the obvious pick. A **shortcut** saves time but has hazards; a **boost lane**
+is longer but has boost pads; the main road has the snacks. The game sizes the hazards
+and counts the pads so that, on average, every road through a fork takes about as long,
+and a clean jump or a well-hit pad is what makes one pay. See
+[details/tracks.md](details/tracks.md) for the formula.
+
 ## Controls
 
 The game is played in landscape on an iPad. On-screen buttons sit under the thumbs:
@@ -79,6 +96,23 @@ place (1st–9th). After the third lap, a card shows your place and time and off
 - **Boost pads**, orange with white arrows, sit on the straightest parts of every track
   (three or four per track, in the middle or to one side). Driving over one gives a boost,
   the same as a drift's, so it's worth steering onto. Rivals use them too.
+- **Jumps**: a narrow **boost ramp**, about a third of the road wide, orange with white
+  arrows like a boost pad, with a nose that kicks up at the top. It sits to one side, so
+  you have to steer onto it. Hitting it boosts the kart 30% faster (up to boost speed) and
+  launches it. In the air the kart keeps that speed, steers only a little, doesn't slow
+  over grass and sails over banana peels; the boost carries on a moment after landing.
+  How far it flies depends on how fast it hit the ramp: about 30 units at full speed,
+  much less when slow.
+- **Forks**: on every track but the Park, the road splits in places and joins again further
+  on, with the border running down the middle between the two. Keep to the side the
+  branch goes, or steer into it, to take it. In Easy driving the kart follows whichever
+  road it's on. Rivals take branches a little under half the time.
+- **Hazards** sit across shortcuts, right after a ramp: the road stops and starts again on
+  the far side. **Rough ground** (long grass in the Backyard) slows a kart that lands in it
+  to a crawl. **Water** (a creek on Snow, syrup in the Bakery, bath water in the Toy Room)
+  sinks it: "Splash!", two seconds under, then it pops up standing still on the road just
+  past the hazard, keeping its items. Clear it by hitting the ramp at speed; miss the
+  ramp, or hit it slowly, and you're in. Rivals gamble too, and sometimes miss.
 - **Karts bump** each other apart. Bumping never spins anyone out (Brave Mode aside).
 - **Catch-up**: rivals far ahead of you ease off, and rivals far behind speed up, so
   the race stays close. Rivals differ a little in top speed, so the order varies.

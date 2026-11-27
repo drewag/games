@@ -33,6 +33,16 @@ Each track is a place drawn from a pet's point of view:
 
 The pets are tiny in the kitchen: the counter's things are many times their size.
 
+A **ramp** is a narrow wedge, a third of the road wide: its slope is a boost pad (orange,
+white arrows pointing ahead), and its low sides and the nose that kicks up at the top are
+in the track's colors (brown on the Backyard, red and white in the Kitchen, blue and white
+on Snow, pink and cream in the Bakery, blue and yellow in the Toy Room). Taking off throws
+orange and yellow puffs, like a boost. A **hazard** fills a branch from border to border: long grass with tufts,
+or water with white ripples (blue, or syrup-brown in the Bakery). A sinking kart drops
+below the surface in a spray of puffs. Where the road **forks**, both roads have the
+track's border along their outer edges and down the island between them, and the curbs
+stop where one road opens into the other.
+
 Where a big hill in the distance reaches over the road (on the Snow, Backyard and Park
 tracks), the road goes through it in a **tunnel**: a grey stone arch with a stone portal
 at each end, and no border inside.

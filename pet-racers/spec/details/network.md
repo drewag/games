@@ -30,15 +30,17 @@ mid-race or to a full room gets `no {why: busy | full}` and is closed.
 ## Who decides what
 
 - **Each iPad drives its own racer.** Guests send `s {p}` about 15 times a second:
-  position, heading, speed, steer, lap, track index, spin, brave, rush, then drift direction, spark level, hop height and boost (for Pro driving; older iPads ignore them). The host sends
+  position, heading, speed, steer, lap, track index, spin, brave, rush, then drift direction, spark level, height off the road (a hop plus a jump) and boost (older iPads ignore them). The host sends
   `s {all, rv}` to everyone: every person's latest `p` (its own included) and the rivals
-  (track distance, lane, speed, spin). Each iPad moves friends' karts toward their
+  (track distance, lane, speed, spin, then which branch they're on and how far along it). Each iPad moves friends' karts toward their
   reported position, nudged forward by their speed, and snaps if it's more than 12 units
   off.
-- **The host drives the rivals.** Guests run them forward at their speed and ease toward
-  each update. Catch-up uses the average progress of everyone in the room.
+- **The host drives the rivals**, and picks which branches they take. Guests run them
+  forward at their speed and ease toward each update, switching road when the host says
+  so. Every iPad works out rivals' jumps for itself from where they are. Catch-up uses the average progress of everyone in the room.
 - **A power's owner decides what it hits.** Effects are mirrored with `fx {o, k, ...}` (the
-  owner's pet, then ring, ball, cake, plus, hack, flash or mind), and only the owner checks for hits. A hit on a
+  owner's pet, then ring, ball, cake, plus, hack, flash, mind or peel; a ball or cherry
+  also says which branch it was thrown on), and only the owner checks for hits. A hit on a
   friend, or on a rival when we aren't the host, is sent as `spin {who}`. The host applies
   rival spins and forwards every `spin`, `fx` and `gone` to the other guests. Each iPad
   acts only on a `spin` for its own pet.

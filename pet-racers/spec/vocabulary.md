@@ -11,6 +11,12 @@ first column is the one you want.
 | Power | A pet's own special move, one of the items | racers.md | ability, special, super |
 | Item | What a snack gives: Banana Peel, Cherry, Hot Pepper, or the pet's power | play.md | ability, pickup, weapon |
 | Spare | The second item held in reserve; tap to swap | play.md | reserve, backup, slot 2 |
+| Fork | Where the road splits in two and joins again further on | play.md | split, junction, intersection |
+| Branch | The second road at a fork | play.md | alternate route, side path, shortcut path |
+| Jump | A narrow boost ramp on the road that launches karts | play.md | ramp jump, launcher, kicker |
+| Shortcut | A branch that's quicker than the main road, with hazards | play.md | cut, secret path |
+| Boost lane | A branch that's longer than the main road, with boost pads | play.md | bypass, detour |
+| Hazard | Rough ground or water across a shortcut, after a ramp | play.md | pit, trap, obstacle, gap |
 | Boost pad | The orange arrow patch on a straight that gives a boost | play.md | dash panel, speed pad, booster |
 | Snack | Food floating over the track | play.md | pickup, item, coin, collectible |
 | Spin out | A kart twirls and slows after a power hits it | play.md | knocked out, stunned, crash |

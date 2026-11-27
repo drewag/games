@@ -23,6 +23,8 @@ match it.
 - [x] Harder tracks: Snow, Bakery, Toy Room; pick screen in two steps, pet then track
 - [x] Pro driving: Go/Back/Hop, drifting with blue, orange and purple boosts, rocket start
 - [x] Items from snacks (Banana Peel, Cherry, Hot Pepper, the pet's power) with a spare; boost pads
+- [x] Forks and jumps on every track but the Park; rivals take branches and jump
+- [x] Narrow boost ramps; shortcuts over rough ground or water, balanced by a formula; boost lanes
 
 ## Next
 
@@ -30,6 +32,8 @@ match it.
 - [ ] Race the harder tracks on the iPad: are they hard but fair? Tune widths and corners
 - [ ] Try Pro driving on the iPad: button layout, drift tightness, spark times, boost size
 - [ ] Items on the iPad: odds of the power, peel and cherry sizes, where the Spare button sits
+- [ ] Forks and jumps on the iPad: are the forks easy to see coming? Are the hazard costs
+  (1.6 s rough, 3 s water) right? Do kids hit the side ramps, or need them wider?
 - [ ] Race with three or more real iPads: check smoothness and Wi-Fi drops
 
 ## Later

@@ -962,6 +962,8 @@ for (const r of RACERS) {
     s: 0, lat: 0, skill: 0.9, phase: 0,                                     // rivals
     steer: 0, idx: 0, lap: 1, item: null, spare: null, rollT: 0, wallCd: 0, rush: 0, nibble: 0, brave: 0,  // people
     padT: 0, padCd: 0,                                                      // boost pads
+    path: null, pf: 0, plat: 0, bs: 0, s0: 0, netBs: 0, airY: 0, vy: 0,     // branches and jumps
+    sunk: 0, sunkIn: null, fails: null,
     hopT: 0, hopY: 0, hopHeld: false, hopWas: false, drift: 0, driftLv: 0, driftYaw: 0,  // Pro driving
     charge: 0, boost: 0, stall: 0, gasAt: null,
     netS: 0, netLat: 0, remote: null,                                       // over the network
@@ -974,6 +976,7 @@ for (const r of RACERS) {
 // built the first time it's picked and kept after that.
 // ---------------------------------------------------------------------------
 const N = 800;           // samples around every track
+const MAX_SPEED = 26;    // a kart's top speed, units a second
 let HALF = 7;            // half the road width (narrower on the harder tracks)
 let WALL = HALF + 3.5;   // where the border stops you
 const wrap = (f) => ((f % N) + N) % N;
@@ -1003,12 +1006,154 @@ function headingAt(f) {
 
 const angleTo = (from, to) => { const d = to - from; return Math.atan2(Math.sin(d), Math.cos(d)); };
 
-// Is p within `d` of the road's centre line anywhere?
+// Paths: the main loop, plus branches that leave it and join it again
+// further on. A branch is a road of its own, sampled about once per unit;
+// `from` and `to` are the main-loop samples where it leaves and rejoins.
+// Positions on a path are (path, f, lat): f counts that path's samples.
+let MAIN = null;              // the main loop as a path
+let BRANCHES = [];            // the current track's branches
+let RAMPS = [];               // the current track's jumps: { path, f } where the ramp starts
+
+function makeBranch(b) {
+  const from = wrap(b.from), to = wrap(b.to);
+  const pts = [TP[wrap(from - 14)], TP[from], ...b.via.map(([x, z]) => new V3(x, 0, z)), TP[to], TP[wrap(to + 14)]];
+  const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+  const dense = curve.getSpacedPoints(Math.round(curve.getLength()));
+  const nearest = (p, lo, hi) => {
+    let best = lo, d = Infinity;
+    for (let i = lo; i < hi; i++) { const e = dense[i].distanceToSquared(p); if (e < d) { d = e; best = i; } }
+    return best;
+  };
+  const mid = dense.length >> 1;
+  const P = dense.slice(nearest(TP[from], 0, mid), nearest(TP[to], mid, dense.length) + 1);
+  const n = P.length;
+  const T = P.map((_, i) => P[Math.min(n - 1, i + 1)].clone().sub(P[Math.max(0, i - 1)]).normalize());
+  let len = 0;
+  for (let i = 1; i < n; i++) len += P[i].distanceTo(P[i - 1]);
+  return {
+    P, T, R: T.map((t) => new V3(-t.z, 0, t.x)), n, len, half: b.half || HALF, from, to, span: wrap(to - from),
+    take: b.take ?? 0.45, hazard: b.hazard || null, padAt: b.pads || [], gaps: [], saved: 0,
+  };
+}
+
+// Shortcuts and risk. Every branch should be a fair choice: on average
+// neither road is quicker, and the better driver gains by picking well.
+//
+//   saved = (main length - branch length) / cruising speed
+//           + PAD_GAIN for each boost pad on the branch
+//           - SNACK_COST if the main road has snacks the branch skips
+//
+// A branch that comes out slower (saved < 0) is a boost lane: it gets enough
+// boost pads to make up the difference. One that comes out quicker is a
+// shortcut and needs risk to match: hazards (rough ground that crawls, or water
+// that sinks you) with a ramp to jump each one.
+//
+//   hazards = enough that none is riskier than MAX_RISK
+//   risk    = saved / (hazards * the hazard's cost)   how often a jump may go wrong
+//   gap     = J * (0.35 + 0.6 * risk) - the ramp's length
+//
+// J is how far a kart flies off a ramp at full speed (boosted by the ramp). A gap a third of J is hard to miss
+// at any speed; one nearly J long needs full speed and the ramp hit square.
+const JUMP_V = 9, GRAVITY = 24;
+const RAMP_BOOST = 1.3;          // a ramp is a boost ramp: it launches you 30% faster, up to boost speed
+const RAMP_LEN = 4, RAMP_H = 0.9, RAMP_W = 3.2;
+const jumpLength = (speed) => speed * 2 * JUMP_V * THREE.MathUtils.clamp(speed / MAX_SPEED, 0.5, 1.2) / GRAVITY;
+const HAZARD_COST = { rough: 1.6, water: 3 };       // seconds a botched jump costs
+const SNACK_COST = 0.35, PAD_GAIN = 0.3, MAX_RISK = 0.75;
+function balance(br) {
+  const cruise = MAX_SPEED * 0.95;
+  const skipsSnacks = snacks.some((p) => wrap(p.f - br.from) < br.span);
+  const savedBy = () => ((br.span / N) * TL - br.len) / cruise + br.padAt.length * PAD_GAIN - (skipsSnacks ? SNACK_COST : 0);
+  br.saved = savedBy();
+  br.gaps = [];
+  if (br.saved < 0) {                                      // a boost lane
+    const add = Math.ceil(-br.saved / PAD_GAIN);
+    const all = br.padAt.length + add;
+    br.padAt = [...Array(all)].map((_, k) => 0.15 + (0.7 * (k + 0.5)) / all);
+    br.saved = savedBy();
+    return;
+  }
+  if (br.saved < 0.25) return;                             // close enough already
+  if (!br.hazard) { console.warn('Pet Racers: a shortcut with no hazard', br); return; }
+  const cost = HAZARD_COST[br.hazard];
+  const count = Math.ceil(br.saved / (MAX_RISK * cost));
+  const gapFor = (risk) => jumpLength(MAX_SPEED * RAMP_BOOST) * (0.35 + 0.6 * risk) - RAMP_LEN;
+  // Each on the straightest stretch of the branch left, away from its ends.
+  // Room is set aside for the longest gap there could be.
+  const step = stepOf(br), need = (RAMP_LEN + gapFor(1) + 6) * step;
+  for (let k = 0; k < count; k++) {
+    let best = null, bestTurn = Infinity;
+    for (let a = Math.round(br.n * 0.12); a + need < br.n * 0.92; a++) {
+      if (br.gaps.some((g) => a < g.ramp + need + 6 * step && a + need > g.ramp - 6 * step)) continue;
+      const turn = Math.abs(angleTo(pathHeading(br, a), pathHeading(br, a + need)));
+      if (turn < bestTurn) { bestTurn = turn; best = a; }
+    }
+    if (best === null) { console.warn('Pet Racers: no room on a branch for another hazard', br); break; }
+    br.gaps.push({ kind: br.hazard, ramp: best + 3 * step });
+  }
+  // If fewer fit than it needs, each takes more of the risk (and it's too big a shortcut).
+  const risk = br.saved / (br.gaps.length * cost);
+  if (risk > 0.9) console.warn('Pet Racers: a shortcut saves more than its hazards can make up for', br);
+  const len = gapFor(Math.min(risk, 1));
+  for (const g of br.gaps) Object.assign(g, { a: g.ramp + RAMP_LEN * step, b: g.ramp + (RAMP_LEN + len) * step, len, risk });
+  // Ramps sit to one side, swapping sides, so the steering help's pull toward
+  // the middle doesn't line you up by itself: you have to aim.
+  br.gaps.sort((x, y) => x.a - y.a).forEach((g, k) => { g.lat = (k % 2 ? -1 : 1) * (br.half - RAMP_W / 2 - 0.6); });
+}
+
+// Samples per unit along a path.
+const stepOf = (path) => (path.main ? N / TL : (path.n - 1) / path.len);
+const wallOf = (path) => path.half + 3.5;
+
+function pathPoint(path, f, lat, out = new V3()) {
+  if (path.main) return trackPoint(f, lat, out);
+  f = THREE.MathUtils.clamp(f, 0, path.n - 1);
+  const i = Math.min(path.n - 2, Math.floor(f)), j = i + 1, t = f - i;
+  out.lerpVectors(path.P[i], path.P[j], t);
+  return out.addScaledVector(path.R[i].clone().lerp(path.R[j], t).normalize(), lat);
+}
+function pathHeading(path, f) {
+  if (path.main) return headingAt(f);
+  const t = path.T[Math.round(THREE.MathUtils.clamp(f, 0, path.n - 1))];
+  return Math.atan2(t.x, t.z);
+}
+const pathRight = (path, f) => (path.main ? TR[Math.floor(wrap(f))] : path.R[Math.round(THREE.MathUtils.clamp(f, 0, path.n - 1))]);
+// Where a spot on a branch is along the main loop, for places and laps.
+const mainF = (path, f) => (path.main ? f : wrap(path.from + (f / (path.n - 1)) * path.span));
+// `dist` units ahead along the road, carrying on into the main loop off the
+// end of a branch.
+function aheadPoint(path, f, dist, lat, out = new V3()) {
+  const g = f + dist * stepOf(path);
+  if (path.main || g <= path.n - 1) return pathPoint(path, g, lat, out);
+  return trackPoint(path.to + (g - (path.n - 1)) / stepOf(path) * (N / TL), lat, out);
+}
+// Did going from a to b (samples on `path`) pass over f?
+function passed(path, a, b, f) {
+  if (!path.main) return a < f && b >= f;
+  const step = wrap(b - a);
+  return step < N / 2 && wrap(f - a) > 0 && wrap(f - a) <= step;
+}
+
+// Is p within `d` of any road's centre line?
 function nearTrack(p, d) {
   const d2 = d * d;
-  for (let i = 0; i < N; i += 2) {
-    const dx = TP[i].x - p.x, dz = TP[i].z - p.z;
-    if (dx * dx + dz * dz < d2) return true;
+  for (const path of [MAIN, ...BRANCHES]) {
+    for (let i = 0; i < path.n; i += 2) {
+      const dx = path.P[i].x - p.x, dz = path.P[i].z - p.z;
+      if (dx * dx + dz * dz < d2) return true;
+    }
+  }
+  return false;
+}
+// Is p on the road (curbs included) of any path but `except`?
+function onOtherRoad(p, except) {
+  for (const path of [MAIN, ...BRANCHES]) {
+    if (path === except) continue;
+    const d2 = (path.half + 1.2) ** 2;
+    for (let i = 0; i < path.n; i++) {
+      const dx = path.P[i].x - p.x, dz = path.P[i].z - p.z;
+      if (dx * dx + dz * dz < d2) return true;
+    }
   }
   return false;
 }
@@ -1171,8 +1316,7 @@ const BORDERS = {
     const s = 1.1 + r() * 0.5;
     parts.push(place(paint(sphere(8, 6), r() < 0.5 ? '#4f9a3a' : '#5aa844'), { p: [p.x, 0.35, p.z], s: [s * 1.5, s * 0.75, s * 1.5] }));
   },
-  fence: (parts, r, p, i) => {
-    const a = headingAt(i);
+  fence: (parts, r, p, i, a) => {
     parts.push(place(paint(box(), '#fffdf6'), { p: [p.x, 1.2, p.z], r: [0, a, 0], s: [0.5, 2.4, 0.9] }));
     parts.push(place(paint(new THREE.ConeGeometry(0.62, 0.6, 4), '#fffdf6'), { p: [p.x, 2.7, p.z], r: [0, a + Math.PI / 4, 0] }));
   },
@@ -1185,8 +1329,8 @@ const BORDERS = {
     parts.push(place(paint(new THREE.TorusGeometry(1, 0.42, 6, 14), ['#ff9ec4', '#7a4524', '#fff3e0'][Math.floor(i / 2) % 3]),
       { p: [p.x, 0.72, p.z], r: [Math.PI / 2, 0, 0], s: [1, 1, 0.6] }));
   },
-  block: (parts, r, p, i) => {
-    parts.push(place(paint(box(), TOY_COLORS[Math.floor(i / 2) % 4]), { p: [p.x, 0.9, p.z], r: [0, headingAt(i), 0], s: [1.8, 1.8, 1.8] }));
+  block: (parts, r, p, i, a) => {
+    parts.push(place(paint(box(), TOY_COLORS[Math.floor(i / 2) % 4]), { p: [p.x, 0.9, p.z], r: [0, a, 0], s: [1.8, 1.8, 1.8] }));
   },
   marshmallow: (parts, r, p, i) => {
     parts.push(place(paint(new THREE.CylinderGeometry(0.9, 0.9, 1.6, 12), Math.floor(i / 3) % 2 ? '#ffd6e5' : '#fffdf6'),
@@ -1213,6 +1357,9 @@ const TRACKS = [
     sky: [0.55, 0.74, 0.92], hills: ['#a7d672', '#93c95f'], clouds: true,
     props: [[0.22, tree], [0.22, sunflower], [0.2, flowers], [0.06, pool], [0.06, doghouse], [0.14, gardenBed], [0.1, rock]],
     count: 200,
+    // A shortcut through the garden over long grass, and a jump on the long diagonal.
+    branches: [{ from: 515, to: 688, via: [[-62, -8], [-88, -50]], half: 5, hazard: 'rough' }],
+    jumps: [[440, 0.45]], ramp: ['#b5652b', '#e2a35c'], rough: '#5e8f32', tuft: '#3f7a25',
     extra: (parts) => { house(parts, 0, -235, 0); house(parts, 230, 40, Math.PI / 2); },
   },
   {
@@ -1223,6 +1370,13 @@ const TRACKS = [
     ground: (x, y) => (Math.floor(x / 10) + Math.floor(y / 10)) % 2 ? '#fffdf6' : '#b9d9ee',  // tiles
     sky: [0.96, 0.85, 0.62], hills: null, clouds: false,
     props: [[0.22, mug], [0.14, toaster], [0.3, fruit], [0.18, jar], [0.16, cookie]], count: 90,
+    // Round the outside of the wiggle on the right and of the dip at the
+    // bottom. Over spilled flour if they come out shorter, boost lanes if longer.
+    branches: [
+      { from: 255, to: 372, via: [[160, 0], [160, 45]], hazard: 'rough' },
+      { from: 532, to: 682, via: [[-52, 118], [-104, 88]], hazard: 'rough' },
+    ],
+    jumps: [[112, -0.45]], ramp: ['#e2483b', '#fffdf6'], rough: '#f4efe4', tuft: '#e9dfc9',
     extra: (parts) => {
       for (let k = 0; k < 12; k++) {
         const a = (k / 12) * Math.PI * 2;
@@ -1241,6 +1395,9 @@ const TRACKS = [
     ground: (x, y) => (Math.sin(x * 0.05) * Math.cos(y * 0.043) + Math.sin(x * 0.11 + y * 0.07) * 0.5 > 0.6 ? '#e6eef7' : '#f7f9fc'),
     sky: [0.74, 0.84, 0.95], hills: ['#f4f7fb', '#dfe8f2'], clouds: true,
     props: [[0.55, snowPine], [0.2, snowman], [0.25, rock]], count: 220,
+    // Across the bottom-left corner, over an icy creek.
+    branches: [{ from: 595, to: 680, via: [[-100, 95]], half: 4.5, hazard: 'water' }],
+    jumps: [[415, 0.45]], ramp: ['#8fb4d9', '#fbfdff'], water: '#5b95d0',
   },
   {
     name: 'Bakery', blurb: 'Zig-zags between the donuts on a narrow road', hard: true, half: 5.5, offroad: 0.5, rivals: 1.03,
@@ -1251,6 +1408,13 @@ const TRACKS = [
     ground: (x, y) => (Math.floor(y / 7) % 2 ? '#d9a066' : '#cf955a'),     // a wooden table
     sky: [0.98, 0.88, 0.72], hills: null, clouds: false,
     props: [[0.4, cupcake], [0.15, rollingPin], [0.25, cookie], [0.1, jar], [0.1, mug]], count: 110,
+    // A smooth lane past the zig-zags along the top (longer, so boost pads make
+    // up for it), and a cut across the top-right corner over pools of syrup.
+    branches: [
+      { from: 28, to: 168, via: [[-40, -133], [35, -133]], half: 4.5 },
+      { from: 185, to: 270, via: [[105, -68]], half: 4.5, hazard: 'water' },
+    ],
+    jumps: [[745, 0]], ramp: ['#ff9ec4', '#fff3e0'], water: '#b8742a',
   },
   {
     name: 'Toy Room', blurb: 'The twistiest, narrowest road, round the toys', hard: true, half: 5, offroad: 0.5, rivals: 1.04,
@@ -1261,6 +1425,13 @@ const TRACKS = [
     ground: (x, y) => (Math.floor(Math.max(Math.abs(x), Math.abs(y)) / 25) % 2 ? '#7fa8d8' : '#9cc0e6'),   // a rug
     sky: [0.93, 0.9, 0.98], hills: null, clouds: false,
     props: [[0.4, blockTower], [0.3, toyBall], [0.3, crayon]], count: 120,
+    // Two narrow shortcuts, across the bulge in the hook and across the neck of
+    // the loop at the bottom right, each over bath water.
+    branches: [
+      { from: 156, to: 197, via: [[-9, -24]], half: 4, hazard: 'water' },
+      { from: 398, to: 452, via: [[100, 120]], half: 4, hazard: 'water' },
+    ],
+    jumps: [[28, -0.4]], ramp: ['#3b7dd8', '#ffcf3f'], water: '#5b9bd5',
   },
 ];
 
@@ -1348,7 +1519,7 @@ function findPads() {
   for (const f of order) {
     if (pads.length === 4 || turn[f] > 0.35) break;
     if (pads.some((p) => Math.min(wrap(f - p.f), wrap(p.f - f)) < apart)) continue;
-    pads.push({ f, lat: 0 });
+    pads.push({ path: MAIN, f, lat: 0 });
   }
   pads.sort((a, b) => a.f - b.f).forEach((p, k) => { p.lat = lats[k % 3] * HALF; });
   return pads;
@@ -1365,32 +1536,78 @@ function buildTrack(def) {
     col.set(color);
     for (const v of [a, b, c, a, c, d]) { P.push(v.x, y, v.z); C.push(col.r, col.g, col.b); }
   };
-  for (let i = 0; i < N; i++) {
-    const j = i + 1;
-    const at = (lat) => [trackPoint(i, lat), trackPoint(j, lat)];
-    const strip = (l0, l1, color, y = 0.03) => {
-      const [a0, a1] = at(l0), [b0, b1] = at(l1);
-      quad(a0, b0, b1, a1, color, y);
-    };
-    strip(-HALF, HALF, def.road);
-    if (def.line && Math.floor(i / 4) % 2 === 0) strip(-0.25, 0.25, def.line, 0.04);
-    const stripe = def.curbs[Math.floor(i / 3) % 2];
-    strip(-HALF - 1.2, -HALF, stripe, 0.05);
-    strip(HALF, HALF + 1.2, stripe, 0.05);
-    if (i < 3) {                                           // checkered start line
-      for (let k = 0; k < 2 * HALF; k++) strip(-HALF + k, -HALF + k + 1, (k + i) % 2 ? '#2a2228' : '#fffdf6', 0.06);
+  for (const path of [MAIN, ...BRANCHES]) {
+    const H = path.half, last = path.main ? N : path.n - 1;
+    // A branch's samples are closer together, so its stripes take more of them.
+    const per = path.main ? 1 : Math.max(1, Math.round(TL / N));
+    for (let i = 0; i < last; i++) {
+      const j = i + 1;
+      if (path.gaps && path.gaps.some((g) => j > g.a && i < g.b)) continue;    // no road over a hazard
+      const at = (lat) => [pathPoint(path, i, lat), pathPoint(path, j, lat)];
+      const strip = (l0, l1, color, y = 0.03) => {
+        const [a0, a1] = at(l0), [b0, b1] = at(l1);
+        quad(a0, b0, b1, a1, color, y);
+      };
+      strip(-H, H, def.road);
+      const k = Math.floor(i / per);
+      if (def.line && Math.floor(k / 4) % 2 === 0) strip(-0.25, 0.25, def.line, 0.04);
+      const stripe = def.curbs[Math.floor(k / 3) % 2];
+      // No curb across the mouth of another road where two roads meet.
+      for (const side of [-1, 1]) {
+        if (!BRANCHES.length || !onOtherRoad(pathPoint(path, i + 0.5, side * (H + 0.6)), path)) strip(side * H, side * (H + 1.2), stripe, 0.05);
+      }
+      if (path.main && i < 3) {                              // checkered start line
+        for (let k = 0; k < 2 * HALF; k++) strip(-HALF + k, -HALF + k + 1, (k + i) % 2 ? '#2a2228' : '#fffdf6', 0.06);
+      }
     }
   }
-  // Boost pads on the straights, drawn on the road: orange with yellow arrows.
-  def.pads = findPads();
+  // Boost pads on the straights, drawn on the road: orange with white arrows.
+  def.pads = [...findPads(), ...BRANCHES.flatMap((b) => b.padAt.map((k) => ({ path: b, f: Math.round(k * (b.n - 1)), lat: 0 })))];
   for (const pad of def.pads) {
-    const step = N / TL, w = PAD_W / 2, at = (a, l) => trackPoint(pad.f + a * step, pad.lat + l);
+    const step = stepOf(pad.path), w = PAD_W / 2, at = (a, l) => pathPoint(pad.path, pad.f + a * step, pad.lat + l);
     const h = PAD_LEN / 2;
     quad(at(-h, -w), at(-h, w), at(h, w), at(h, -w), '#ff6a00', 0.07);
     for (const a0 of [-h + 0.2, -h + 1.8, -h + 3.4]) {
       for (const side of [-1, 1]) {             // one arm of a chevron pointing ahead
         quad(at(a0, side * (w - 0.4)), at(a0 + 0.8, side * (w - 0.4)), at(a0 + 2.3, 0), at(a0 + 1.5, 0), '#fffdf6', 0.08);
       }
+    }
+  }
+  // Hazards: the road stops, and there's rough ground or water up to the
+  // border on both sides until it starts again.
+  for (const br of BRANCHES) for (const g of br.gaps) {
+    const w = wallOf(br) + 1.5, color = g.kind === 'water' ? def.water : def.rough;
+    const from = Math.floor(g.a), to = Math.ceil(g.b);
+    for (let i = from; i < to; i++) {
+      const a0 = pathPoint(br, i, -w), a1 = pathPoint(br, i + 1, -w), b0 = pathPoint(br, i, w), b1 = pathPoint(br, i + 1, w);
+      quad(a0, b0, b1, a1, color, 0.02);
+      if (g.kind === 'water' && (i * 7) % 5 === 0) {                // ripples
+        const l = ((i * 37) % 11) - 5.5;
+        quad(pathPoint(br, i, l - 1), pathPoint(br, i, l + 1), pathPoint(br, i + 0.3, l + 1), pathPoint(br, i + 0.3, l - 1), '#ffffff', 0.025);
+      }
+    }
+    if (g.kind === 'rough') {                                        // tufts
+      for (let i = from; i < to; i += 1.5) {
+        for (let l = -w + 1; l < w; l += 2.2) {
+          const p = pathPoint(br, i + r() * 0.8, l + r());
+          parts.push(place(paint(new THREE.ConeGeometry(0.35, 0.9 + r() * 0.5, 5), def.tuft || '#3f7a25'), { p: [p.x, 0.45, p.z] }));
+        }
+      }
+    }
+  }
+  // Ramps: a narrow boost ramp, orange with white arrows like a boost pad, with
+  // a nose that kicks up at the top and sides in the track's colors. Aim for it.
+  for (const { path, f, lat } of RAMPS) {
+    const len = RAMP_LEN, rise = RAMP_H, step = stepOf(path), a = pathHeading(path, f + (len / 2) * step);
+    const c = pathPoint(path, f + (len / 2) * step, lat), tip = pathPoint(path, f + len * step, lat);
+    const [c1, c2] = def.ramp || ['#d98c3e', '#ffcf3f'];
+    const g = paint(new THREE.BoxGeometry(1, 1, 1, 8, 1, 8), (x, y, z) =>
+      (y > 0.4 ? (Math.floor((z + 0.5 + Math.abs(x) * 0.9) * 3.5) % 2 ? '#ff6a00' : '#fffdf6') : c2));
+    parts.push(place(g, { p: [c.x, rise / 2 - 0.12, c.z], r: [-Math.atan2(rise, len), a, 0, 'YXZ'], s: [RAMP_W, 0.3, Math.hypot(len, rise)] }));
+    parts.push(place(paint(box(), c1), { p: [tip.x, rise + 0.05, tip.z], r: [-0.7, a, 0, 'YXZ'], s: [RAMP_W, 0.25, 0.7] }));
+    for (const side of [-1, 1]) {                                     // the wedge's sides
+      const sp = pathPoint(path, f + (len / 2) * step, lat + side * (RAMP_W / 2 - 0.1));
+      parts.push(place(paint(box(), c1), { p: [sp.x, rise / 4, sp.z], r: [0, a, 0], s: [0.2, rise / 2, len * 0.9] }));
     }
   }
   const road = new THREE.BufferGeometry();
@@ -1401,13 +1618,16 @@ function buildTrack(def) {
 
   // the border along both sides
   const edges = [];                               // [sample, first part, end] to drop in tunnels
-  for (let i = 0; i < N; i += def.borderStep) {
-    for (const side of [-1, 1]) {
-      const p = trackPoint(i, side * (WALL + 2.4));
-      if (nearTrack(p, WALL - 0.5)) continue;     // don't poke into another part of the road
-      const from = parts.length;
-      BORDERS[def.border](parts, r, p, i);
-      edges.push([i, from, parts.length]);
+  for (const path of [MAIN, ...BRANCHES]) {
+    const every = path.main ? def.borderStep : Math.max(1, Math.round(def.borderStep * stepOf(path) / (N / TL)));
+    for (let i = 0; i < (path.main ? N : path.n); i += every) {
+      for (const side of [-1, 1]) {
+        const p = pathPoint(path, i, side * (wallOf(path) + 2.4));
+        if (nearTrack(p, WALL - 0.5)) continue;     // don't poke into another part of the road
+        const from = parts.length;
+        BORDERS[def.border](parts, r, p, i, pathHeading(path, i));
+        if (path.main) edges.push([i, from, parts.length]);
+      }
     }
   }
 
@@ -1496,6 +1716,17 @@ function loadTrack(def) {
   HALF = def.half || 7;
   WALL = HALF + 3.5;
   setCurve(def.ctrl);
+  MAIN = def.main ||= { main: true, P: TP, T: TT, R: TR, n: N, len: TL, half: HALF, from: 0, to: 0, span: N };
+  if (!def.branchPaths) {
+    def.branchPaths = (def.branches || []).map(makeBranch);
+    BRANCHES = def.branchPaths;
+    for (const b of BRANCHES) balance(b);
+  }
+  BRANCHES = def.branchPaths;
+  // Jumps on the main road are a ramp to one side, for a landing boost; on a
+  // branch, the ramp over its hazard.
+  RAMPS = [...(def.jumps || []).map(([f, lat]) => ({ path: MAIN, f, lat: lat * HALF })),
+    ...BRANCHES.flatMap((b) => b.gaps.map((g) => ({ path: b, f: g.ramp, lat: g.lat, gap: g })))];
   if (!def.mesh) { def.mesh = buildTrack(def); scene.add(def.mesh); }
   def.mesh.visible = true;
   compMat.uniforms.uSky.value.set(...def.sky);
@@ -1578,12 +1809,12 @@ const newId = () => `${player.name}-${fxCount++}`;
 
 // A ball rolls down the road and spins out the first kart it touches: Choco's
 // Sports Ball bounces off the hedges; a cherry goes straight and quicker.
-function addBall(owner, id, f, lat, latVel, kind = 'ball') {
+function addBall(owner, id, f, lat, latVel, kind = 'ball', pi = 0) {
   const cherry = kind === 'cherry';
   const m = mesh(cherry ? cherryGeo : ballGeo);
   m.scale.setScalar(cherry ? 1 : 0.6);
   scene.add(m);
-  balls.push({ id, owner, m, life: cherry ? 3 : 5, f, lat, latVel, speed: cherry ? 54 : 42, cherry });
+  balls.push({ id, owner, m, life: cherry ? 3 : 5, f, lat, latVel, speed: cherry ? 54 : 42, cherry, path: BRANCHES[pi - 1] || MAIN });
 }
 function addPeel(owner, id, x, z) {
   const m = mesh(peelGeo);
@@ -1598,11 +1829,12 @@ function addCake(owner, id, x, z) {
   scene.add(m);
   cakes.push({ id, owner, m, life: 20 });
 }
-function addPlus(owner, id, f, lat, target) {
+function addPlus(owner, id, f, lat, target, x, z) {
   const m = mesh(plusGeo);
-  trackPoint(f, lat, m.position).setY(0.7);
+  if (x === undefined) trackPoint(f, lat, m.position).setY(0.7);
+  else m.position.set(x, 0.7, z);
   scene.add(m);
-  pluses.push({ id, owner, m, life: 5, f, lat, target: racerNamed(target) || null, homing: false });
+  pluses.push({ id, owner, m, life: 5, f, lat, target: racerNamed(target) || null, homing: x !== undefined });
 }
 // Instant Hacking: pixels where the kart was and where it popped up.
 function hackFx(owner, from, to) {
@@ -1745,7 +1977,7 @@ function updateSound() {
   loops.lp.frequency.setTargetAtTime(300 + sp * 700, t, 0.1);
   loops.engineGain.gain.setTargetAtTime(racing ? 0.05 + sp * 0.03 : 0, t, 0.15);
   loops.squeal.gain.setTargetAtTime(racing && me.drift ? 0.025 + me.driftLv * 0.008 : 0, t, 0.05);
-  const offroad = Math.abs(latOf(me.pos, me.idx)) > HALF + 1.2 && me.brave <= 0;
+  const offroad = Math.abs(me.plat) > (me.path || MAIN).half + 1.2 && me.brave <= 0 && me.airY <= 0;
   loops.rumble.gain.setTargetAtTime(racing && offroad && me.speed > 4 ? 0.12 : 0, t, 0.08);
 }
 
@@ -1771,6 +2003,10 @@ const SFX = {
   roll: () => tone(600 + Math.random() * 600, 0, 0.04, 'square', 0.03),
   got: () => { tone(784, 0, 0.08, 'triangle', 0.07); tone(1175, 0.07, 0.14, 'triangle', 0.07); },
   pad: () => { noise(0, 0.35, 0.1, 800, 'bandpass', 4000); tone(400, 0, 0.3, 'square', 0.04, 900); },
+  splash: () => { noise(0, 0.5, 0.15, 700, 'lowpass', 200); tone(500, 0, 0.3, 'sine', 0.06, 120); },
+  pop: () => tone(300, 0, 0.15, 'sine', 0.08, 900),
+  jump: () => tone(250, 0, 0.3, 'triangle', 0.08, 800),
+  land: () => { noise(0, 0.12, 0.1, 300, 'lowpass'); tone(140, 0, 0.1, 'triangle', 0.08, 80); },
   slip: () => { tone(900, 0, 0.35, 'sine', 0.08, 200); noise(0.05, 0.2, 0.05, 2000); },
   // the items
   'Banana Peel': () => { noise(0, 0.12, 0.08, 500, 'lowpass'); tone(250, 0, 0.12, 'sine', 0.08, 120); },
@@ -1793,7 +2029,6 @@ const sfx = (name, ...a) => { if (AC && SFX[name]) SFX[name](...a); };
 // The race
 // ---------------------------------------------------------------------------
 const LAPS = 3;
-const MAX_SPEED = 26;
 const input = { left: false, right: false, gas: false, back: false, hop: false, look: false };
 let pro = false;              // Pro driving: gas, hop and drift, no steering help
 let player = RACERS[0];
@@ -1826,7 +2061,7 @@ function resetRace() {
     Object.assign(r, { heading: headingAt(f), speed: 0, spin: 0, spinAngle: 0,
       s: (f / N) * TL, lat, netS: (f / N) * TL, netLat: lat, skill: skills[k] || 0.9, phase: k * 1.7,
       steer: 0, idx: Math.floor(wrap(f)), lap: 0, item: null, spare: null, rollT: 0, rush: 0, nibble: 0, brave: 0, remote: null,
-      padT: 0, padCd: 0,
+      padT: 0, padCd: 0, path: MAIN, pf: Math.floor(wrap(f)), plat: lat, bs: 0, s0: 0, netBs: 0, airY: 0, vy: 0, sunk: 0, sunkIn: null, fails: null,
       hopT: 0, hopY: 0, hopHeld: false, drift: 0, driftLv: 0, driftYaw: 0, charge: 0, boost: 0, stall: 0, gasAt: null });
   });
   for (const p of snacks) { p.gone = 0; p.m.visible = true; }
@@ -1867,7 +2102,7 @@ function updateHop(me, dt, want, canDrive) {
   const pressed = input.hop && !me.hopWas;
   me.hopWas = input.hop;
   if (!input.hop) me.hopHeld = false;
-  if (pressed && canDrive && me.hopT <= 0 && !me.drift && me.spin <= 0 && me.stall <= 0) {
+  if (pressed && canDrive && me.hopT <= 0 && me.airY <= 0 && !me.drift && me.spin <= 0 && me.stall <= 0) {
     me.hopT = HOP_TIME;
     me.hopHeld = true;
     sfx('hop');
@@ -1918,16 +2153,100 @@ function launch() {
 }
 
 // Is a kart at track sample `f`, `lat` from the middle, on a boost pad?
-function onPad(f, lat) {
-  const reach = (PAD_LEN / 2) * (N / TL);
+function onPad(path, f, lat) {
+  const reach = (PAD_LEN / 2) * stepOf(path);
   return track.pads.some((p) => {
-    const d = wrap(f - p.f);
-    return Math.min(d, N - d) < reach && Math.abs(lat - p.lat) < PAD_W / 2 + 0.4;
+    if (p.path !== path) return false;
+    const d = path.main ? Math.min(wrap(f - p.f), wrap(p.f - f)) : Math.abs(f - p.f);
+    return d < reach && Math.abs(lat - p.lat) < PAD_W / 2 + 0.4;
   });
+}
+
+// The hazard at f on a path, if any.
+const hazardAt = (path, f) => (path && path.gaps ? path.gaps.find((g) => f >= g.a && f <= g.b) : null) || null;
+// The next hazard ahead of f on a path.
+const nextGap = (path, f) => (path.gaps ? path.gaps.find((g) => f < g.a) : null);
+
+// Jumps: a kart going over a ramp flies, and lands with a little boost.
+// `speed` lets a rival who means to clear a gap jump as if at full speed.
+// Every ramp is a boost ramp: the kart leaves it faster than it hit it.
+function jump(r, speed = r.speed) {
+  const out = Math.min(speed * RAMP_BOOST, MAX_SPEED * RAMP_BOOST);
+  r.speed = Math.max(r.speed, out);
+  r.boost = Math.max(r.boost, 1.2);
+  if (r.padT !== undefined) r.padT = Math.max(r.padT, 1.2);       // rivals keep the speed up too
+  r.vy = JUMP_V * THREE.MathUtils.clamp(out / MAX_SPEED, 0.5, 1.2);
+  r.airY = 0.01;
+  for (let k = 0; k < 6; k++) puff(r.pos.clone().setY(0.6).addScaledVector(fwdOf(r), -1.4), k % 2 ? '#ff8a1c' : '#ffcf3f', 0.4);
+  if (r === player) { sfx('jump'); sfx('pad'); }
+}
+function updateAir(r, dt) {
+  if (r.airY <= 0) return;
+  r.airY += r.vy * dt;
+  r.vy -= GRAVITY * dt;
+  if (r.airY > 0) return;
+  r.airY = 0; r.vy = 0;
+  puff(r.pos.clone().setY(0.3).addScaledVector(fwdOf(r), -1));
+  puff(r.pos.clone().setY(0.3).addScaledVector(fwdOf(r), 1));
+  if (r === player) sfx('land');
+}
+// The ramp a kart at `lat` drove onto going from a to b on `path`, if any.
+const rampCrossed = (path, a, b, lat) => RAMPS.find((rp) => rp.path === path
+  && Math.abs(lat - rp.lat) < RAMP_W / 2 + 0.4 && passed(path, a, b, rp.f));
+
+// Water: the kart sinks, and after a moment is put back on the road just past
+// the hazard, standing still.
+const SINK_TIME = 2;
+function sink(r, gap) {
+  Object.assign(r, { sunk: SINK_TIME, sunkIn: gap, speed: 0, drift: 0, driftLv: 0, boost: 0, rush: 0 });
+  for (let k = 0; k < 8; k++) puff(r.pos.clone().setY(0.3 + Math.random() * 0.6), k % 2 ? '#ffffff' : track.water, 0.7);
+  if (r === player) { sfx('splash'); showPop('Splash!'); }
+}
+function resurface(r) {
+  const path = rivalPath(r);
+  const f = Math.min(path.n - 1, (r.sunkIn ? r.sunkIn.b : rivalF(r)) + 4 * stepOf(path));
+  if (r === player) {
+    pathPoint(path, f, 0, r.pos);
+    Object.assign(r, { heading: pathHeading(path, f), path, pf: Math.round(f), plat: 0, idx: Math.floor(mainF(path, f)) });
+    sfx('pop');
+  } else {
+    r.bs = r.netBs = (f / (path.n - 1)) * path.len;
+    r.lat = 0;
+  }
+  puff(pathPoint(path, f, 0).setY(0.6), '#ffffff', 0.5);
+}
+
+// Which road a kart is on, how far along it and how far from its middle.
+// Stays on the road it's on unless another is clearly nearer, and leaves a
+// branch at its ends.
+function locate(me) {
+  const guess = me.path && !me.path.main ? mainF(me.path, me.pf) : me.idx;
+  const mi = findIdx(me.pos, Math.floor(wrap(guess)));
+  let best = { path: MAIN, f: mi, lat: latOf(me.pos, mi) };
+  let cur = !me.path || me.path.main ? best : null;
+  for (const br of BRANCHES) {
+    if (br !== me.path && wrap(mi - br.from + 30) > br.span + 60) continue;   // nowhere near it
+    let bi = 0, d = Infinity;
+    for (let k = 0; k < br.n; k++) { const e = br.P[k].distanceToSquared(me.pos); if (e < d) { d = e; bi = k; } }
+    if (bi === 0 || bi === br.n - 1) continue;                                // off its ends
+    const c = { path: br, f: bi, lat: me.pos.clone().sub(br.P[bi]).dot(br.R[bi]) };
+    if (br === me.path) cur = c;
+    if (Math.abs(c.lat) < Math.abs(best.lat)) best = c;
+  }
+  if (cur && cur !== best && Math.abs(best.lat) > Math.abs(cur.lat) - 0.8) best = cur;
+  me.path = best.path; me.pf = best.f; me.plat = best.lat;
+  me.idx = Math.floor(mainF(best.path, best.f));
 }
 
 function updatePlayer(dt, canDrive) {
   const me = player;
+  if (me.sunk > 0) {                                   // under water for a moment
+    me.sunk -= dt;
+    me.speed = 0;
+    if (Math.random() < dt * 8) puff(me.pos.clone().setY(0.2), '#ffffff', 0.5);
+    if (me.sunk <= 0) { me.sunk = 0; resurface(me); }
+    return;
+  }
   const want = (input.right ? 1 : 0) - (input.left ? 1 : 0);
   me.steer += (want - me.steer) * Math.min(1, dt * 7);
   // Easy driving, and after the finish line in Pro, the kart drives itself.
@@ -1940,23 +2259,27 @@ function updatePlayer(dt, canDrive) {
   if (!easy) updateHop(me, dt, want, canDrive);
   else if (me.drift || me.hopY) Object.assign(me, { drift: 0, driftLv: 0, hopT: 0, hopY: 0 });
 
-  const i = me.idx;
-  const lat = latOf(me.pos, i);
-  const offroad = Math.abs(lat) > HALF + 1.2;
+  const path = me.path || MAIN, lat = me.plat;
+  const flying = me.airY > 0;
+  const rough = !flying && hazardAt(path, me.pf);
+  const offroad = (Math.abs(lat) > path.half + 1.2 || !!rough) && !flying;
   let target = !canDrive || me.stall > 0 ? 0
     : easy || input.gas || input.hop ? MAX_SPEED
     : input.back ? -REVERSE : 0;
-  if (offroad && me.brave <= 0 && me.boost <= 0) target *= track.offroad || 0.55;
+  if (rough) target *= 0.35;                          // a botched jump: crawling through it
+  else if (offroad && me.brave <= 0 && me.boost <= 0) target *= track.offroad || 0.55;
   if (me.rush > 0) target *= 1.4;
   else if (me.nibble > 0) target *= 1.15;
   if (me.boost > 0 && canDrive) target = Math.max(target, MAX_SPEED * 1.3);
   if (me.spin > 0) target *= 0.25;
   const coasting = !easy && target === 0 && !input.back && me.stall <= 0;
-  me.speed += (target - me.speed) * Math.min(1, dt * (target > me.speed
+  // In the air there's nothing to push on: the kart keeps the speed it left the ramp with.
+  if (!flying) me.speed += (target - me.speed) * Math.min(1, dt * (target > me.speed
     ? (me.rush > 0 || me.boost > 0 ? 3 : 0.9) : coasting ? 0.7 : 2.5));
 
   let grip = THREE.MathUtils.clamp(Math.abs(me.speed) / MAX_SPEED, 0.25, 1);
   if (!easy) grip *= Math.min(1, Math.abs(me.speed) / 3);   // no turning on the spot
+  if (flying) grip *= 0.35;                                 // not much steering in the air
   if (me.drift) {
     // A drift is a slow, wide arc: half a full turn on its own, a bit less than
     // a full turn steering in, nearly straight steering out.
@@ -1968,30 +2291,34 @@ function updatePlayer(dt, canDrive) {
 
   // Steering help: with no button held, ease toward the road ahead.
   if (easy && !want && me.speed > 1) {
-    const aim = trackPoint(i + 14, THREE.MathUtils.clamp(lat, -HALF + 2, HALF - 2) * 0.6);
+    const aim = aheadPoint(path, me.pf, 20, THREE.MathUtils.clamp(lat, -path.half + 2, path.half - 2) * 0.6);
     me.heading += angleTo(me.heading, Math.atan2(aim.x - me.pos.x, aim.z - me.pos.z)) * Math.min(1, dt * 1.6);
   }
   me.pos.x += Math.sin(me.heading) * me.speed * dt;
   me.pos.z += Math.cos(me.heading) * me.speed * dt;
 
   // Soft hedges: slide back onto the track instead of crashing.
-  const prevIdx = me.idx;
-  me.idx = findIdx(me.pos, me.idx);
-  const j = me.idx;
-  const lat2 = latOf(me.pos, j);
+  const prevIdx = me.idx, prevPath = me.path, prevF = me.pf;
+  locate(me);
+  const lat2 = me.plat, wall = wallOf(me.path);
   me.wallCd -= dt;
-  if (Math.abs(lat2) > WALL) {
-    me.pos.addScaledVector(TR[j], (Math.abs(lat2) - WALL) * -Math.sign(lat2));
-    me.heading += angleTo(me.heading, Math.atan2(TT[j].x, TT[j].z)) * Math.min(1, dt * 6);
+  if (Math.abs(lat2) > wall) {
+    me.pos.addScaledVector(pathRight(me.path, me.pf), (Math.abs(lat2) - wall) * -Math.sign(lat2));
+    me.heading += angleTo(me.heading, pathHeading(me.path, me.pf)) * Math.min(1, dt * 6);
     if (me.wallCd <= 0) { me.speed *= 0.7; me.wallCd = 0.5; puff(me.pos.clone().setY(0.5)); sfx('wall'); }
   }
 
   // Boost pads.
   me.padCd -= dt;
-  if (onPad(j, lat2) && me.hopY < 0.3) {
+  if (onPad(me.path, me.pf, lat2) && me.hopY < 0.3 && me.airY < 0.3) {
     me.boost = Math.max(me.boost, 1.1);
     if (me.padCd <= 0 && canDrive) { sfx('pad'); me.padCd = 0.6; }
   }
+
+  if (me.path === prevPath && me.airY <= 0 && me.speed > 8 && rampCrossed(me.path, prevF, me.pf, lat2)) jump(me);
+  updateAir(me, dt);
+  const hz = me.airY <= 0 && hazardAt(me.path, me.pf);
+  if (hz && hz.kind === 'water' && state !== 'countdown') sink(me, hz);
 
   if (prevIdx > N * 0.75 && me.idx < N * 0.25) {
     me.lap++;
@@ -2013,13 +2340,56 @@ function updatePlayer(dt, canDrive) {
   me.spinAngle = me.spin > 0 ? me.spinAngle + dt * 14 : 0;
 }
 
+// A rival's road and how far along it they are (in that road's samples). On
+// the main loop `s` is the distance driven; on a branch `bs` is the distance
+// along the branch, and `s` follows along as if on the main loop, for places.
+const rivalPath = (r) => (r.path && !r.path.main ? r.path : MAIN);
+const rivalF = (r) => (r.path && !r.path.main ? (r.bs / r.path.len) * (r.path.n - 1) : wrap((r.s / TL) * N));
+
+// Drive a rival on by `adv`. Reaching a branch, the rival driving it may take it.
+function advanceRival(r, adv, chooses) {
+  const path = rivalPath(r), f0 = rivalF(r);
+  if (!path.main) {
+    r.bs += adv;
+    const share = (path.span / N) * TL;
+    if (r.bs >= path.len) { r.s = r.s0 + share; r.path = MAIN; r.bs = 0; }
+    else r.s = r.s0 + (r.bs / path.len) * share;
+  } else {
+    r.s += adv;
+    if (chooses) {
+      for (const br of BRANCHES) {
+        if (passed(MAIN, f0, rivalF(r), br.from) && Math.random() < br.take) {
+          // Rivals gamble too: some will miss the ramp, about as often as the hazard is risky.
+          Object.assign(r, { path: br, bs: 0, s0: r.s, fails: br.gaps.map((g) => Math.random() < g.risk * 0.8),
+          });
+          break;
+        }
+      }
+    }
+  }
+  const rp = rivalPath(r) === path && r.airY <= 0 && r.speed > 8 && rampCrossed(path, f0, rivalF(r), r.lat);
+  if (rp) jump(r, rp.gap ? Math.max(r.speed, MAX_SPEED * 1.02) : r.speed);
+  const hz = r.airY <= 0 && hazardAt(rivalPath(r), rivalF(r));
+  if (hz && hz.kind === 'water' && drivesRivals()) sink(r, hz);
+}
+
 function updateRivals(dt, canDrive) {
   if (!drivesRivals()) {
     // Follow the room maker's rivals, filling the gaps between messages.
     for (const r of rivals) {
+      const path = rivalPath(r), f0 = rivalF(r);
       r.netS += r.speed * dt;
       r.s += r.speed * dt;
       r.s += (r.netS - r.s) * Math.min(1, dt * 4);
+      if (!path.main) {
+        r.netBs += r.speed * dt;
+        r.bs += r.speed * dt;
+        r.bs += (r.netBs - r.bs) * Math.min(1, dt * 4);
+      }
+      const rp = r.airY <= 0 && r.speed > 8 && rampCrossed(path, f0, rivalF(r), r.lat);
+      if (rp) jump(r, rp.gap ? Math.max(r.speed, MAX_SPEED * 1.02) : r.speed);
+      updateAir(r, dt);
+      r.sunk = Math.max(0, r.sunk - dt * 0.5);       // the room maker says when they're back up
       r.lat += (r.netLat - r.lat) * Math.min(1, dt * 6);
       r.spin = Math.max(0, r.spin - dt);
       r.spinAngle = r.spin > 0 ? r.spinAngle + dt * 14 : 0;
@@ -2029,18 +2399,33 @@ function updateRivals(dt, canDrive) {
   const humans = RACERS.filter(isHuman);
   const ours = humans.reduce((a, r) => a + progressOf(r), 0) / humans.length;
   for (const r of rivals) {
+    if (r.sunk > 0) {
+      r.sunk -= dt;
+      r.speed = 0;
+      if (r.sunk <= 0) { r.sunk = 0; resurface(r); }
+      r.spin = Math.max(0, r.spin - dt);
+      continue;
+    }
     // Catch-up: ease off when far ahead of the people, push when far behind.
     const gap = ours - progressOf(r);
     const band = THREE.MathUtils.clamp(1 + (gap / N) * 1.2, 0.82, 1.12);
     let target = canDrive ? MAX_SPEED * r.skill * band * (track.rivals || 1) : 0;
-    if (onPad((r.s / TL) * N, r.lat)) r.padT = 1;
+    if (onPad(rivalPath(r), rivalF(r), r.lat)) r.padT = 1;
     if (r.padT > 0 && canDrive) { target = Math.max(target, MAX_SPEED * 1.25); r.padT -= dt; }
+    if (r.airY <= 0 && hazardAt(rivalPath(r), rivalF(r))) target *= 0.35;
     if (r.spin > 0) target *= 0.25;
-    r.speed += (target - r.speed) * Math.min(1, dt * (target > r.speed ? (r.padT > 0 ? 3 : 0.8) : 3));
-    r.s += r.speed * dt;
-    const wantLat = 3.2 * Math.sin(r.s * 0.013 + r.phase) + 1.2 * Math.sin(r.s * 0.041 + r.phase * 2);
-    r.lat += (wantLat - r.lat) * Math.min(1, dt * 0.8);
-    r.lat = THREE.MathUtils.clamp(r.lat, -HALF + 1, HALF - 1);
+    if (r.airY <= 0) r.speed += (target - r.speed) * Math.min(1, dt * (target > r.speed ? (r.padT > 0 ? 3 : 0.8) : 3));
+    advanceRival(r, r.speed * dt, true);
+    updateAir(r, dt);
+    const rpath = rivalPath(r), half = rpath.half, rf = rivalF(r);
+    let wantLat = (half / 7) * (3.2 * Math.sin(r.s * 0.013 + r.phase) + 1.2 * Math.sin(r.s * 0.041 + r.phase * 2));
+    // Heading for a hazard: line up with the ramp, or (the unlucky ones) just beside it.
+    const next = nextGap(rpath, rf);
+    if (next && rf > next.ramp - 40 * stepOf(rpath)) {
+      wantLat = r.fails && r.fails[rpath.gaps.indexOf(next)] ? next.lat - Math.sign(next.lat) * (RAMP_W / 2 + 1.4) : next.lat;
+    }
+    r.lat += (wantLat - r.lat) * Math.min(1, dt * (rpath.gaps && rpath.gaps.length ? 2.5 : 0.8));
+    r.lat = THREE.MathUtils.clamp(r.lat, -half + 1, half - 1);
     r.spin = Math.max(0, r.spin - dt);
     r.spinAngle = r.spin > 0 ? r.spinAngle + dt * 14 : 0;
   }
@@ -2086,16 +2471,18 @@ function getHit(text) {
 let lastBump = 0;
 function syncRacers(t, dt = 0) {
   for (const r of rivals) {
-    const f = (r.s / TL) * N;
-    trackPoint(f, r.lat, r.pos);
-    r.heading = headingAt(f);
+    const path = rivalPath(r), f = rivalF(r);
+    pathPoint(path, f, r.lat, r.pos);
+    r.heading = pathHeading(path, f);
   }
   for (const r of RACERS) {
     r.group.position.copy(r.pos);
     r.group.rotation.y = r.heading;
     r.driftYaw += (-r.drift * 0.35 - r.driftYaw) * Math.min(1, dt * 3);   // swing in gently
     r.body.rotation.y = r.spinAngle + r.driftYaw;
-    r.body.position.y = Math.abs(Math.sin(t * 18 + r.phase)) * 0.05 * (Math.abs(r.speed) / MAX_SPEED) + r.hopY;
+    r.body.position.y = Math.abs(Math.sin(t * 18 + r.phase)) * 0.05 * (Math.abs(r.speed) / MAX_SPEED) + r.hopY + r.airY
+      - (r.sunk > 0 ? 0.9 : 0);
+    r.body.rotation.x = r.airY > 0 ? THREE.MathUtils.clamp(-r.vy * 0.03, -0.3, 0.3) : 0;   // nose up, then down
     r.pet.scale.setScalar(r.brave > 0 ? 1 + Math.sin(t * 20) * 0.06 : 1);
   }
   for (const r of [player, ...friends]) {
@@ -2118,7 +2505,7 @@ function syncRacers(t, dt = 0) {
       d.normalize();
       for (const [r, sign] of [[A, 1], [B, -1]]) {
         if (r === player) r.pos.addScaledVector(d, sign * push * 0.6);
-        else if (!friends.includes(r) && drivesRivals()) r.lat += sign * d.dot(TR[Math.floor(wrap((r.s / TL) * N))]) * push * 0.4;
+        else if (!friends.includes(r) && drivesRivals()) r.lat += sign * d.dot(pathRight(rivalPath(r), rivalF(r))) * push * 0.4;
       }
       if (player.brave > 0 && (A === player || B === player)) spinOut(A === player ? B : A);
     }
@@ -2193,6 +2580,9 @@ function nextAhead(reach) {
   return best && { r: best, gap };
 }
 
+// Just ahead of the player on the road they're on.
+const throwFrom = () => ({ f: player.pf + 4 * stepOf(player.path), lat: player.plat, pi: BRANCHES.indexOf(player.path) + 1 });
+
 const BASICS = {
   'Banana Peel'() {
     const at = player.pos.clone().addScaledVector(fwdOf(player), -2.6);
@@ -2202,8 +2592,8 @@ const BASICS = {
     showPop('Peel!');
   },
   Cherry() {
-    const b = { id: newId(), f: player.idx + 3, lat: latOf(player.pos, player.idx), latVel: 0, kind: 'cherry' };
-    addBall(player, b.id, b.f, b.lat, 0, 'cherry');
+    const b = { id: newId(), ...throwFrom(), latVel: 0, kind: 'cherry' };
+    addBall(player, b.id, b.f, b.lat, 0, 'cherry', b.pi);
     send({ t: 'fx', k: 'ball', o: player.name, ...b });
     showPop('Cherry!');
   },
@@ -2224,10 +2614,10 @@ const POWERS = {
   },
   'Speed Eating'() { player.rush = 3; showPop('Sugar rush!'); },
   'Sports Ball'() {
-    const f = player.idx + 3;
-    const rel = angleTo(headingAt(f), player.heading);
-    const b = { id: newId(), f, lat: latOf(player.pos, player.idx), latVel: -Math.sin(rel) * 30 };
-    addBall(player, b.id, b.f, b.lat, b.latVel);
+    const at = throwFrom();
+    const rel = angleTo(pathHeading(player.path, at.f), player.heading);
+    const b = { id: newId(), ...at, latVel: -Math.sin(rel) * 30 };
+    addBall(player, b.id, b.f, b.lat, b.latVel, 'ball', b.pi);
     send({ t: 'fx', k: 'ball', o: player.name, ...b });
     showPop('Kick!');
   },
@@ -2241,8 +2631,11 @@ const POWERS = {
   'Brave Mode'() { player.brave = 4; showPop('Brave!'); },
   'Math Defeater'() {
     const ahead = nextAhead(70);
-    const p = { id: newId(), f: player.idx + 3, lat: latOf(player.pos, player.idx), target: ahead ? ahead.r.name : '' };
-    addPlus(player, p.id, p.f, p.lat, p.target);
+    // On a branch it sets off straight from the kart rather than along the main loop.
+    const off = !player.path.main;
+    const p = { id: newId(), f: player.idx + 3, lat: off ? 0 : player.plat, target: ahead ? ahead.r.name : '',
+      ...(off ? { x: player.pos.x, z: player.pos.z } : {}) };
+    addPlus(player, p.id, p.f, p.lat, p.target, p.x, p.z);
     send({ t: 'fx', k: 'plus', o: player.name, ...p });
     showPop('1 + 1 = 2!');
   },
@@ -2251,9 +2644,10 @@ const POWERS = {
     const ahead = nextAhead(50), step = N / TL;
     const to = progressOf(player) + (ahead ? ahead.gap + 5 * step : 25 * step);
     const from = player.pos.clone();
-    const lat = THREE.MathUtils.clamp(latOf(player.pos, player.idx), -HALF + 1.5, HALF - 1.5);
+    const lat = THREE.MathUtils.clamp(player.plat, -HALF + 1.5, HALF - 1.5);
     player.lap = Math.floor(to / N) + 1;
     player.idx = Math.floor(wrap(to));
+    Object.assign(player, { path: MAIN, pf: player.idx, plat: lat });
     trackPoint(to, lat, player.pos);
     player.heading = headingAt(to);
     hackFx(player, from, player.pos);
@@ -2326,15 +2720,20 @@ function updateEffects(dt, t) {
   for (let k = balls.length - 1; k >= 0; k--) {
     const b = balls[k];
     b.life -= dt;
-    b.f += (b.speed * dt / TL) * N;
+    b.f += b.speed * dt * stepOf(b.path);
+    if (!b.path.main && b.f > b.path.n - 1) {         // off the end of a branch, onto the main loop
+      b.f = b.path.to + (b.f - (b.path.n - 1)) / stepOf(b.path) * (N / TL);
+      b.path = MAIN;
+    }
     b.lat += b.latVel * dt;
-    if (Math.abs(b.lat) > WALL - 1) {                 // bounce off the hedges
-      b.lat = Math.sign(b.lat) * (WALL - 1);
+    const edge = wallOf(b.path) - 1;
+    if (Math.abs(b.lat) > edge) {                      // bounce off the hedges
+      b.lat = Math.sign(b.lat) * edge;
       b.latVel *= -1;
       puff(b.m.position.clone());
     }
     b.latVel *= Math.pow(0.6, dt);
-    trackPoint(b.f, b.lat, b.m.position).setY(0.6);
+    pathPoint(b.path, b.f, b.lat, b.m.position).setY(0.6);
     if (b.cherry) b.m.rotation.y += dt * 14;
     else b.m.rotation.x += dt * 20;
     let hit = false;
@@ -2356,7 +2755,7 @@ function updateEffects(dt, t) {
     c.life -= dt;
     c.armed -= dt;
     let hit = false;
-    if (c.armed <= 0 && state === 'race' && player.spin <= 0 && player.pos.distanceTo(c.m.position) < 1.6) {
+    if (c.armed <= 0 && state === 'race' && player.spin <= 0 && player.airY < 0.4 && player.pos.distanceTo(c.m.position) < 1.6) {
       hit = true;
       if (player.brave <= 0) { getHit('Slip!'); sfx('slip'); }
     }
@@ -2385,7 +2784,7 @@ function updateEffects(dt, t) {
     const b = pluses[k], tg = b.target;
     b.life -= dt;
     const at = tg && tg.pos.clone().setY(0.7);
-    if (at && (b.homing || b.m.position.distanceTo(at) < 14)) {
+    if (at && (b.homing || b.m.position.distanceTo(at) < 14 || (rivalPath(tg) !== MAIN || (isHuman(tg) && tg.path && !tg.path.main)) && b.m.position.distanceTo(at) < 45)) {
       b.homing = true;                                  // close: straight at it
       const to = at.sub(b.m.position), len = to.length();
       if (len > 0.01) b.m.position.addScaledVector(to, Math.min(1, (44 * dt) / len));
@@ -2494,6 +2893,7 @@ function dropFriends(gone) {
   for (const r of gone) {
     r.s = r.netS = (((r.lap - 1) * N + r.idx) / N) * TL;
     r.lat = r.netLat = THREE.MathUtils.clamp(latOf(r.pos, r.idx), -HALF + 1, HALF - 1);
+    r.path = MAIN;
     r.skill = 0.9;
     r.remote = null;
   }
@@ -2586,10 +2986,14 @@ function onHostMessage(m) {
         const r = racerNamed(pet);
         if (r && friends.includes(r)) applyRemote(r, p);
       }
-      for (const [name, s, lat, speed, spin] of m.rv) {
+      for (const [name, s, lat, speed, spin, pi = 0, bs = 0, sunk = 0] of m.rv) {
         const r = racerNamed(name);
         if (!r || isHuman(r)) continue;
-        Object.assign(r, { netS: s, netLat: lat, speed, spin: Math.max(r.spin, spin) });
+        const path = BRANCHES[pi - 1] || MAIN;
+        if (rivalPath(r) !== path) { r.path = path; r.bs = bs; }
+        if (sunk > 0 && r.sunk <= 0) sink(r, hazardAt(path, rivalF(r)));
+        if (sunk <= 0 && r.sunk > 0) { r.sunk = 0; r.bs = bs; }
+        Object.assign(r, { netS: s, netLat: lat, netBs: bs, speed, spin: Math.max(r.spin, spin) });
       }
       break;
     case 'spin': onSpin(m); break;
@@ -2626,10 +3030,10 @@ function showFx(m) {
   const owner = racerNamed(m.o);
   if (!owner || owner === player) return;
   if (m.k === 'ring') burstRing(owner);
-  if (m.k === 'ball') addBall(owner, m.id, m.f, m.lat, m.latVel, m.kind);
+  if (m.k === 'ball') addBall(owner, m.id, m.f, m.lat, m.latVel, m.kind, m.pi);
   if (m.k === 'peel') addPeel(owner, m.id, m.x, m.z);
   if (m.k === 'cake') addCake(owner, m.id, m.x, m.z);
-  if (m.k === 'plus') addPlus(owner, m.id, m.f, m.lat, m.target);
+  if (m.k === 'plus') addPlus(owner, m.id, m.f, m.lat, m.target, m.x, m.z);
   if (m.k === 'hack') hackFx(owner, new V3(m.x, 0, m.z), new V3(m.x2, 0, m.z2));
   if (m.k === 'flash') flashFx(owner);
   if (m.k === 'mind') mindFx(owner, (m.who || []).map(racerNamed).filter(Boolean));
@@ -2638,7 +3042,7 @@ function showFx(m) {
 const myState = () => {
   const p = player;
   return [p.pos.x, p.pos.z, p.heading, p.speed, p.steer, p.lap, p.idx, p.spin, p.brave, p.rush,
-    p.drift, p.driftLv, +p.hopY.toFixed(2), p.boost];
+    p.drift, p.driftLv, +(p.hopY + p.airY - (p.sunk > 0 ? 0.9 : 0)).toFixed(2), p.boost];
 };
 
 // About 15 times a second. Guests send where they are; the host sends where
@@ -2655,7 +3059,7 @@ function netTick(now) {
   if (!net.host) { send({ t: 's', p: myState() }); return; }
   if (!net.guests.length) return;
   const all = [[player.name, ...myState()], ...net.guests.filter((g) => g.pet && g.p).map((g) => [g.pet, ...g.p])];
-  send({ t: 's', all, rv: rivals.map((r) => [r.name, r.s, r.lat, r.speed, r.spin]) });
+  send({ t: 's', all, rv: rivals.map((r) => [r.name, r.s, r.lat, r.speed, r.spin, BRANCHES.indexOf(rivalPath(r)) + 1, r.bs, +r.sunk.toFixed(1)]) });
 }
 
 // ---------------------------------------------------------------------------
@@ -2694,8 +3098,8 @@ function updateCamera(dt, t) {
     return;
   }
   const fwd = fwdOf(player);
-  const wantPos = player.pos.clone().addScaledVector(fwd, -5).setY(2.6);
-  const wantLook = player.pos.clone().addScaledVector(fwd, 4).setY(1.2);
+  const wantPos = player.pos.clone().addScaledVector(fwd, -5).setY(2.6 + player.airY * 0.6);
+  const wantLook = player.pos.clone().addScaledVector(fwd, 4).setY(1.2 + player.airY * 0.8);
   const k = 1 - Math.exp(-dt * 5);
   camPos.lerp(wantPos, k);
   camLook.lerp(wantLook, k);
@@ -3006,6 +3410,10 @@ window.autoUpdateIsIdle = () => (state === 'title' || state === 'done') && !net.
 // For testing from the console.
 window.petRacers = {
   RACERS, TRACKS, trackPoint, headingAt, chooseTrack, input, setPro, startRace, usePower, swapItems, eat, pick, placeOf, progressOf, cakes, balls, pluses, peels, net, makeRoom, joinRoom, leaveRoom,
+  get branches() { return BRANCHES; }, get ramps() { return RAMPS; },
+  balance: () => TRACKS.flatMap((d) => { loadTrack(d); return BRANCHES.map((b, k) => ({ track: d.name, branch: k + 1,
+    kind: b.gaps.length ? `${b.gaps.length} × ${b.hazard}` : `${b.padAt.length} pads`, saved: +b.saved.toFixed(2),
+    risk: b.gaps.length ? +b.gaps[0].risk.toFixed(2) : 0, gap: b.gaps.length ? +b.gaps[0].len.toFixed(1) : 0 })); }),
   get player() { return player; }, get friends() { return friends; }, get rivals() { return rivals; }, get state() { return state; },
 };
 
