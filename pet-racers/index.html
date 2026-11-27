@@ -994,12 +994,15 @@ const RACERS = [
     color: '#14946a', parts: () => friesParts(), petY: 1.25 },
 ];
 
+// Karts and pets are drawn at this size; hops and jumps keep their full height.
+const KART_SIZE = 0.5;
+
 function shadowMesh() {
   const g = paint(new THREE.CircleGeometry(1, 20), '#4e6b2e');
   const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.18, depthWrite: false }));
   m.rotation.x = -Math.PI / 2;
   m.position.y = 0.05;
-  m.scale.set(1.1, 1.6, 1);
+  m.scale.set(1.1 * KART_SIZE, 1.6 * KART_SIZE, 1);
   m.layers.set(LAYER_NO_EDGES);
   return m;
 }
@@ -1009,7 +1012,10 @@ for (const r of RACERS) {
   r.body = new THREE.Group();       // bobs, leans and spins; the shadow doesn't
   r.pet = mesh(buildPet(PETS[r.name]));
   r.pet.position.set(0, r.petY, -0.1);
-  r.body.add(mesh(kartGeo(r.parts())), r.pet);
+  const kart = new THREE.Group();
+  kart.scale.setScalar(KART_SIZE);
+  kart.add(mesh(kartGeo(r.parts())), r.pet);
+  r.body.add(kart);
   r.group.add(r.body, shadowMesh());
   scene.add(r.group);
   Object.assign(r, {
@@ -1032,7 +1038,8 @@ for (const r of RACERS) {
 // built the first time it's picked and kept after that.
 // ---------------------------------------------------------------------------
 let N = 800;             // samples around the current track: 800, or more on the long ones
-const MAX_SPEED = 26;    // a kart's top speed, units a second
+const MAX_SPEED = 39;    // a kart's top speed, units a second
+const TURN = 1.7 * MAX_SPEED / 26;   // how fast steering turns the kart: keeps the turning circle as it was at 26
 let HALF = 7;            // half the road width (narrower on the harder tracks)
 let WALL = HALF + 3.5;   // where the border stops you
 const wrap = (f) => ((f % N) + N) % N;
@@ -1120,7 +1127,8 @@ function makeBranch(b) {
 //
 // J is how far a kart flies off a ramp at full speed (boosted by the ramp). A gap a third of J is hard to miss
 // at any speed; one nearly J long needs full speed and the ramp hit square.
-const JUMP_V = 9, GRAVITY = 24;
+// Scaled with top speed so a jump covers the same ground (same arc, just quicker).
+const JUMP_V = 9 * MAX_SPEED / 26, GRAVITY = 24 * (MAX_SPEED / 26) ** 2;
 const RAMP_BOOST = 1.3;          // a ramp is a boost ramp: it launches you 30% faster, up to boost speed
 const RAMP_LEN = 4, RAMP_H = 0.9, RAMP_W = 3.2;
 const jumpLength = (speed) => speed * 2 * JUMP_V * THREE.MathUtils.clamp(speed / MAX_SPEED, 0.5, 1.2) / GRAVITY;
@@ -2507,10 +2515,10 @@ function addBall(owner, id, f, lat, latVel, kind = 'ball', pi = 0) {
   const m = mesh(cherry ? cherryGeo : ballGeo);
   m.scale.setScalar(cherry ? 1 : 0.6);
   scene.add(m);
-  balls.push({ id, owner, m, life: cherry ? 4 : 5, f, lat, latVel, speed: cherry ? 54 : 42, cherry, bounces: 0, path: BRANCHES[pi - 1] || MAIN });
+  balls.push({ id, owner, m, life: cherry ? 4 : 5, f, lat, latVel, speed: cherry ? 81 : 63, cherry, bounces: 0, path: BRANCHES[pi - 1] || MAIN });
 }
 // The Bee: flies at its target, turning toward it, over hedges and grass.
-const BEE_SPEED = 40, BEE_TURN = 3.2;
+const BEE_SPEED = 60, BEE_TURN = 4.8;
 const beeGeo = merge([
   place(paint(sphere(10, 7), (x, y, z) => (Math.floor((z + 1) * 2.5) % 2 ? '#2a2228' : '#ffcf3f')), { s: [0.45, 0.42, 0.65] }),
   place(paint(sphere(8, 5), '#ffffff'), { p: [0.42, 0.38, -0.05], r: [0, 0, -0.5], s: [0.45, 0.08, 0.3] }),
@@ -2802,7 +2810,7 @@ const latOf = (pos, i) => pos.clone().sub(TP[i]).dot(TR[i]);
 // away widens it. A longer drift builds blue, then orange, then purple sparks,
 // and letting go with sparks showing gives a boost. Holding Go while "2" is
 // up in the countdown is a rocket start; holding it from "3" stalls.
-const REVERSE = 8;
+const REVERSE = 12;
 const HOP_TIME = 0.3;
 const SPARKS = [                      // drift time needed, boost seconds
   { at: 0.8, boost: 0.6, color: '#3d9bff' },
@@ -2827,12 +2835,12 @@ function updateHop(me, dt, want, canDrive) {
     if (me.hopT === 0) { me.hopY = 0; puff(me.pos.clone().setY(0.3).addScaledVector(fwdOf(me), -1)); }
   }
   // On the ground, still holding Hop from the hop, steering: start drifting.
-  if (!me.drift && me.hopHeld && me.hopT <= 0 && want && me.speed > 10) {
+  if (!me.drift && me.hopHeld && me.hopT <= 0 && want && me.speed > 15) {
     me.drift = want;
     me.charge = 0;
   }
   if (!me.drift) { me.driftLv = 0; return; }
-  if (me.spin > 0 || me.speed < 6 || !canDrive) {       // lost it: no boost
+  if (me.spin > 0 || me.speed < 9 || !canDrive) {       // lost it: no boost
     me.drift = 0; me.driftLv = 0; me.hopHeld = false;
     return;
   }
@@ -3000,10 +3008,10 @@ function updatePlayer(dt, canDrive) {
   if (me.drift) {
     // A drift is a slow, wide arc: half a full turn on its own, a bit less than
     // a full turn steering in, nearly straight steering out.
-    me.heading -= me.drift * 1.7 * (0.5 + 0.35 * me.steer * me.drift) * grip * dt;
+    me.heading -= me.drift * TURN * (0.5 + 0.35 * me.steer * me.drift) * grip * dt;
   } else {
     const air = me.hopT > 0 ? 0.5 : 1;                       // a hop only turns a little
-    me.heading -= me.steer * 1.7 * grip * air * (me.speed < 0 ? -1 : 1) * dt;
+    me.heading -= me.steer * TURN * grip * air * (me.speed < 0 ? -1 : 1) * dt;
   }
 
   // Steering help: with no button held, ease toward the road ahead. Off for
@@ -3207,7 +3215,7 @@ function syncRacers(t, dt = 0) {
     r.body.rotation.y = r.spinAngle + r.driftYaw;
     r.body.position.y = Math.abs(Math.sin(t * 18 + r.phase)) * 0.05 * (Math.abs(r.speed) / MAX_SPEED) + r.hopY + r.airY
       - (r.sunk > 0 ? 0.9 : 0);
-    r.body.rotation.x = r.airY > 0 ? THREE.MathUtils.clamp(-r.vy * 0.03, -0.3, 0.3) : 0;   // nose up, then down
+    r.body.rotation.x = r.airY > 0 ? THREE.MathUtils.clamp(-r.vy * 0.02, -0.3, 0.3) : 0;   // nose up, then down
     r.pet.scale.setScalar(r.brave > 0 ? 1 + Math.sin(t * 20) * 0.06 : 1);
   }
   for (const r of [player, ...friends]) {
@@ -3224,9 +3232,9 @@ function syncRacers(t, dt = 0) {
       const A = RACERS[a], B = RACERS[b];
       const d = A.pos.clone().sub(B.pos).setY(0);
       const len = d.length();
-      if (len >= 2.2 || len < 0.001) continue;
-      const push = 2.2 - len;
-      if ((A === player || B === player) && push > 0.4 && performance.now() - lastBump > 400) { lastBump = performance.now(); sfx('bump'); }
+      if (len >= 1.2 || len < 0.001) continue;
+      const push = 1.2 - len;
+      if ((A === player || B === player) && push > 0.25 && performance.now() - lastBump > 400) { lastBump = performance.now(); sfx('bump'); }
       d.normalize();
       for (const [r, sign] of [[A, 1], [B, -1]]) {
         if (r === player) r.pos.addScaledVector(d, sign * push * 0.6);
@@ -3595,7 +3603,7 @@ function updateEffects(dt, t) {
     let hit = false;
     if (owns(b.owner)) {
       for (const r of othersOf(b.owner)) {
-        if (r.pos.distanceTo(b.m.position.clone().setY(0)) < 1.8 && r.airY < 0.6 && spinOut(r, 'Bonk!', b.owner)) { hit = true; break; }
+        if (r.pos.distanceTo(b.m.position.clone().setY(0)) < 1.3 && r.airY < 0.6 && spinOut(r, 'Bonk!', b.owner)) { hit = true; break; }
       }
     }
     if (hit || b.life <= 0 || (b.cherry && b.bounces > 3)) {
@@ -3620,7 +3628,7 @@ function updateEffects(dt, t) {
     let hit = false;
     if (owns(b.owner)) {
       for (const r of othersOf(b.owner)) {
-        if (r.pos.distanceTo(b.m.position.clone().setY(0)) < 2 && r.airY < 1.5 && spinOut(r, 'Stung!', b.owner)) { hit = true; break; }
+        if (r.pos.distanceTo(b.m.position.clone().setY(0)) < 1.5 && r.airY < 1.5 && spinOut(r, 'Stung!', b.owner)) { hit = true; break; }
       }
     }
     if (hit || b.life <= 0) {
@@ -3636,13 +3644,13 @@ function updateEffects(dt, t) {
     c.life -= dt;
     c.armed -= dt;
     let hit = false;
-    if (c.armed <= 0 && state === 'race' && player.spin <= 0 && player.airY < 0.4 && player.pos.distanceTo(c.m.position) < 1.6) {
+    if (c.armed <= 0 && state === 'race' && player.spin <= 0 && player.airY < 0.4 && player.pos.distanceTo(c.m.position) < 1.1) {
       hit = true;
       if (player.brave <= 0) { getHit('Slip!'); sfx('slip'); }
     }
     if (!hit && owns(c.owner)) {
       for (const r of rivals) {
-        if (r.pos.distanceTo(c.m.position) < 1.6 && r.airY < 0.4 && spinOut(r, 'Slip!', c.owner)) { hit = true; break; }
+        if (r.pos.distanceTo(c.m.position) < 1.1 && r.airY < 0.4 && spinOut(r, 'Slip!', c.owner)) { hit = true; break; }
       }
     }
     if (hit) { send({ t: 'gone', id: c.id }); puff(c.m.position.clone().setY(0.4), '#ffe14d'); }
@@ -3679,7 +3687,7 @@ function updateEffects(dt, t) {
     let hit = false;
     if (owns(b.owner)) {
       for (const r of othersOf(b.owner)) {
-        if (r.pos.distanceTo(b.m.position.clone().setY(0)) < 1.8 && spinOut(r, 'Defeated!', b.owner)) { hit = true; break; }
+        if (r.pos.distanceTo(b.m.position.clone().setY(0)) < 1.3 && spinOut(r, 'Defeated!', b.owner)) { hit = true; break; }
       }
     }
     if (hit || b.life <= 0) {
@@ -3978,14 +3986,14 @@ function updateCamera(dt, t) {
     } else {
       // The kart sits in the middle of the space left of the cards: look a
       // little to its right, by as much as moves it there on screen.
-      const dist = 5, box = $('pick').getBoundingClientRect(), W = window.innerWidth || 1;
+      const dist = 5 * KART_SIZE, box = $('pick').getBoundingClientRect(), W = window.innerWidth || 1;
       const cx = box.left > 0 ? box.left / 2 : W / 2;
       document.documentElement.style.setProperty('--kartX', `${Math.round(cx)}px`);
       const halfW = dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
       const shift = -((cx / W) * 2 - 1) * halfW;
-      wantPos = new V3(player.pos.x + Math.sin(a) * dist, 2, player.pos.z + Math.cos(a) * dist);
+      wantPos = new V3(player.pos.x + Math.sin(a) * dist, 2 * KART_SIZE, player.pos.z + Math.cos(a) * dist);
       const right = new V3(Math.cos(a), 0, -Math.sin(a));     // the camera's right, looking back at the kart
-      wantLook = player.pos.clone().setY(0.6).addScaledVector(right, shift);
+      wantLook = player.pos.clone().setY(0.6 * KART_SIZE).addScaledVector(right, shift);
     }
     // Glide between the two steps; otherwise stay put.
     const far = camPos.distanceTo(wantPos) > 1;
@@ -3999,7 +4007,7 @@ function updateCamera(dt, t) {
   const fwd = fwdOf(player);
   const wantPos = player.pos.clone().addScaledVector(fwd, -5).setY(2.6 + player.airY * 0.6);
   const wantLook = player.pos.clone().addScaledVector(fwd, 4).setY(1.2 + player.airY * 0.8);
-  const k = 1 - Math.exp(-dt * 5);
+  const k = 1 - Math.exp(-dt * 7.5);
   camPos.lerp(wantPos, k);
   camLook.lerp(wantLook, k);
   if (input.look && state !== 'done') {

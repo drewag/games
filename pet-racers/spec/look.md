@@ -20,6 +20,7 @@ glasses reach back along the sides under a rainbow crest, Scarlet Ivy's hair han
 the back, Zeus's blue ears flop out sideways, and Fluff Puff has a round puff of a tail.
 
 The pet sits in its kart facing forward, so during a race you see the back of its head.
+Karts are small beside the road, so the course reads big around them.
 The pick screen is where you see faces.
 
 ## Karts and the world
