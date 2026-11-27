@@ -32,6 +32,7 @@ match it.
 - [x] A drawn picture of each track on the pick screen
 - [x] The Star: a rare item, sugar rush and Brave Mode at once; items spin for 3 seconds
 - [x] Item odds by place; cherries bounce off the border; the Bee chases the kart ahead
+- [x] Verges (a little slow) and open ground (slow) inside a border that stands back; speed-ups ignore both
 
 ## Next
 
@@ -44,6 +45,8 @@ match it.
 - [ ] The Star and the 3-second spin on the iPad: does the longer spin feel slow?
 - [ ] Item odds by place: does the race spread out but keep changing? Is the Bee too strong
   (speed 40, 10 s)? Tune `ITEM_ODDS`
+- [ ] Verges and open ground on the iPad: do kids get lost out wide? Tune `OPEN_W`,
+  `VERGE_SLOW` and the sharp-bend threshold for close borders
 - [ ] Rivals' items on the iPad: too mean for Zachary on the easy tracks? Tune the wait between items
 - [ ] Easy driving without steering help: can Zachary get round? If not, set `STEERING_HELP` back on
 - [ ] Long tracks on the iPad: is a three-lap race (about 4–5 minutes) too long? Frame rate with

@@ -108,9 +108,20 @@ same way up all race, with its forks and hazards, and every kart as a dot in its
 color; yours is the biggest, ringed in white. After the third lap, a card shows your place and time and offers
 **Race again!** or a different pet.
 
-- **Off the road** (grass, or the kitchen counter) beyond the curbs slows the kart to
-  about half speed.
-- **Hedges, a fence or marshmallows** line the track. Driving into them slides the kart back along the road and
+- **The verge**, a band 5 units wide in a lighter color just past the curbs, slows the
+  kart a little (to 70%). It's on the inside of bends and in stretches along the
+  straights, not everywhere.
+- **Off the road** (grass, or the kitchen counter) past the curbs or verge slows the kart
+  to about half speed.
+- **Open ground**: the border stands well back from the road in most places, about 14
+  units past where the verge would end, so there's room to run wide or cut across the
+  inside of a bend. It's slow going, unless you're quick: a boost (from a drift, a pad
+  or a ramp), the Hot Pepper, the Star, Speed Eating and Brave Mode all carry you over
+  the verge and open ground at full speed. The border closes in on the outside of sharp
+  bends, before and over hazards, under hills, and wherever two roads come close
+  (halfway between them), so there's no skipping part of the lap. It moves in and out
+  gradually.
+- **Hedges, a fence or marshmallows** make the border. Driving into them slides the kart back along the road and
   costs some speed. It never stops the kart or turns it around.
 - **Boost pads**, orange with white arrows, sit on the straightest parts of every track
   (three or four per track, in the middle or to one side). Driving over one gives a boost,

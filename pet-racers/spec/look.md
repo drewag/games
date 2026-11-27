@@ -46,6 +46,13 @@ below the surface in a spray of puffs. Where the road **forks**, both roads have
 track's border along their outer edges and down the island between them, and the curbs
 stop where one road opens into the other.
 
+The **verge** is a flat band past the curbs in a color between the road and the ground
+(gravel in the Park, longer grass in the Backyard, slush on Snow, sugar in the Bakery,
+felt in the Toy Room, wet sand on the Beach, straw on the Farm, undergrowth in the
+Jungle), widening and narrowing gradually. The **border** follows where the karts are
+stopped, so it stands out across the open ground in most places and swings in close
+on the outside of sharp bends; scenery stays outside it.
+
 On the long tracks the ground, scenery and hills spread out to match, and the camera over
 the pick screen rises higher and sees further, with the fade to paper pushed back to suit.
 

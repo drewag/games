@@ -1188,6 +1188,113 @@ function onOtherRoad(p, except) {
   return false;
 }
 
+// Edges. Beside the road, each side has, going out:
+//   the curb, then sometimes a VERGE (a band that slows you a little: on the
+//   inside of bends and in stretches along the straights), then the open ground
+//   (much slower), then the border, which stops you.
+// The border stands back OPEN_W from the verge, leaving open ground to cut
+// across, except on the outside of sharp bends, where it's close to keep you
+// on, over hazards and in tunnels. Where two roads come close, it stands
+// halfway between them, so nobody skips part of the lap. Boosts, the Star,
+// Speed Eating and Brave Mode ignore both slowdowns, so a boost can carry
+// you across. The border moves in and out gradually along the road.
+const VERGE_W = 5, OPEN_W = 14, VERGE_SLOW = 0.7, WALL_SLOPE = 0.6;
+const nearWall = (path) => path.half + 3.5;
+function roadGrid() {
+  const cells = new Map(), key = (x, z) => `${Math.floor(x / 10)},${Math.floor(z / 10)}`;
+  for (const path of [MAIN, ...BRANCHES]) {
+    for (let i = 0; i < path.n; i++) {
+      const k = key(path.P[i].x, path.P[i].z);
+      if (!cells.has(k)) cells.set(k, []);
+      cells.get(k).push([path, i]);
+    }
+  }
+  // Does any sample within `r` of p pass test(path, i)?
+  return (p, r, test) => {
+    const cx = Math.floor(p.x / 10), cz = Math.floor(p.z / 10), c = Math.ceil(r / 10);
+    for (let dx = -c; dx <= c; dx++) for (let dz = -c; dz <= c; dz++) {
+      for (const [path, i] of cells.get(`${cx + dx},${cz + dz}`) || []) if (test(path, i)) return true;
+    }
+    return false;
+  };
+}
+function makeEdges(path, near, seed) {
+  const n = path.n, step = stepOf(path), H = path.half, curb = H + 1.2, open = curb + VERGE_W + OPEN_W;
+  const wall = [new Float32Array(n), new Float32Array(n)], verge = [new Float32Array(n), new Float32Array(n)];
+  const head = (f) => pathHeading(path, path.main ? wrap(f) : THREE.MathUtils.clamp(f, 0, n - 1));
+  const apart = (op, i, j) => (op !== path ? Infinity
+    : (path.main ? Math.min(wrap(i - j), wrap(j - i)) : Math.abs(i - j)) / step);
+  for (let i = 0; i < n; i++) {
+    const turn = angleTo(head(i - 18 * step), head(i + 18 * step));
+    const inside = turn < 0 ? 1 : 0;                    // 0 is the left side, 1 the right
+    for (const k of [0, 1]) {
+      const side = k ? 1 : -1;
+      let w = Math.abs(turn) > 0.7 && k !== inside ? nearWall(path) : open;
+      // Another road, or another part of this one, out this way: halfway to it.
+      for (let d = H + 5; d < 2 * open; d += 1.5) {
+        const q = pathPoint(path, i, side * d);
+        if (near(q, 14, (op, j) => apart(op, i, j) > 40 && q.distanceTo(op.P[j]) < op.half + 1.2)) {
+          w = Math.min(w, Math.max(nearWall(path), (curb + d) / 2));
+          break;
+        }
+      }
+      wall[k][i] = w;
+      const along = i / step;
+      const v = (k === inside && Math.abs(turn) > 0.3) || (Math.abs(turn) < 0.2 && Math.sin(along * 0.025 + side * 1.9 + seed) > 0);
+      verge[k][i] = v ? VERGE_W : 0;
+    }
+  }
+  // Close in over hazards (and a little before), so the water can't be skirted.
+  for (const g of path.gaps || []) {
+    for (let i = Math.max(0, Math.floor(g.ramp - 25 * step)); i <= Math.min(n - 1, Math.ceil(g.b + 8 * step)); i++) {
+      wall[0][i] = wall[1][i] = nearWall(path);
+    }
+  }
+  return { wall, verge };
+}
+// Walls move in and out gradually, and the verge never reaches the border.
+function smoothEdges(path) {
+  const { wall, verge } = path.edge, n = path.n, ds = 1 / stepOf(path), curb = path.half + 1.2;
+  const ease = (a, slope) => {
+    for (let pass = 0; pass < (path.main ? 2 : 1); pass++) {
+      for (let i = 1; i < n + (path.main ? n : 0); i++) { const j = i % n, h = (i - 1) % n; a[j] = Math.min(a[j], a[h] + slope * ds); }
+      for (let i = n - 2 + (path.main ? n : 0); i >= 0; i--) { const j = i % n, h = (i + 1) % n; a[j] = Math.min(a[j], a[h] + slope * ds); }
+    }
+  };
+  for (const k of [0, 1]) {
+    ease(wall[k], WALL_SLOPE);
+    ease(verge[k], 0.5);
+    for (let i = 0; i < n; i++) verge[k][i] = Math.max(0, Math.min(verge[k][i], wall[k][i] - curb - 1.5));
+  }
+}
+function edgeIndex(path, f) {
+  return path.main ? Math.floor(wrap(f)) : THREE.MathUtils.clamp(Math.round(f), 0, path.n - 1);
+}
+// Where the border is on the side of `lat`, and how wide the verge is there.
+function wallAt(path, f, lat) {
+  return path.edge ? path.edge.wall[lat < 0 ? 0 : 1][edgeIndex(path, f)] : nearWall(path);
+}
+function vergeAt(path, f, lat) {
+  return path.edge ? path.edge.verge[lat < 0 ? 0 : 1][edgeIndex(path, f)] : 0;
+}
+// 'road', 'verge' or 'off' (the slow open ground).
+function groundAt(path, f, lat) {
+  const curb = path.half + 1.2, a = Math.abs(lat);
+  return a <= curb ? 'road' : a <= curb + vergeAt(path, f, lat) ? 'verge' : 'off';
+}
+// Is p inside the borders of any road (or within `margin` of them)?
+function insideBorders(p, margin) {
+  for (const path of [MAIN, ...BRANCHES]) {
+    for (let i = 0; i < path.n; i++) {
+      const d = p.clone().sub(path.P[i]);
+      if (Math.abs(d.dot(path.T[i])) > 2.5) continue;
+      const lat = d.dot(path.R[i]);
+      if (Math.abs(lat) < wallAt(path, i, lat) + margin) return true;
+    }
+  }
+  return false;
+}
+
 // --- scenery pieces ----------------------------------------------------------
 const pick1 = (r, list) => list[Math.floor(r() * list.length)];
 
@@ -1500,7 +1607,7 @@ const TRACKS = [
     name: 'Park', blurb: 'Round the park, past the hedges and trees',
     ctrl: [[0, -90], [60, -95], [110, -60], [105, 0], [70, 30], [90, 80], [40, 110],
       [-20, 90], [-50, 40], [-100, 50], [-120, 0], [-90, -60], [-50, -85]],
-    road: '#c8c0b4', line: '#fffdf6', curbs: ['#e2483b', '#fffdf6'], border: 'hedge', borderStep: 3,
+    road: '#c8c0b4', line: '#fffdf6', curbs: ['#e2483b', '#fffdf6'], verge: '#d6cc98', border: 'hedge', borderStep: 3,
     ground: (x, y) => (Math.sin(x * 0.05) * Math.cos(y * 0.043) + Math.sin(x * 0.11 + y * 0.07) * 0.5 > 0.6 ? '#9ccf55' : '#8cc34a'),
     sky: [0.55, 0.74, 0.92], hills: ['#a7d672', '#93c95f'], clouds: true,
     props: [[0.4, tree], [0.22, pine], [0.26, flowers], [0.12, rock]], count: 260,
@@ -1509,7 +1616,7 @@ const TRACKS = [
     name: 'Backyard', blurb: 'Along the fence, past the pool and the doghouse',
     ctrl: [[0, -95], [80, -100], [130, -55], [115, 5], [135, 65], [85, 115], [10, 110], [-30, 70],
       [-65, 25], [-115, 5], [-130, -50], [-75, -95]],
-    road: '#c9a274', line: null, curbs: ['#9a9088', '#b4aca0'], border: 'fence', borderStep: 2,
+    road: '#c9a274', line: null, curbs: ['#9a9088', '#b4aca0'], verge: '#b3c968', border: 'fence', borderStep: 2,
     ground: (x, y) => (Math.floor(x / 9) + Math.floor(y / 9)) % 2 ? '#8cc34a' : '#97cb52',   // mowed stripes
     sky: [0.55, 0.74, 0.92], hills: ['#a7d672', '#93c95f'], clouds: true,
     props: [[0.22, tree], [0.22, sunflower], [0.2, flowers], [0.06, pool], [0.06, doghouse], [0.14, gardenBed], [0.1, rock]],
@@ -1523,7 +1630,7 @@ const TRACKS = [
     name: 'Kitchen', blurb: 'Across the counter, between the marshmallows',
     ctrl: [[-100, -80], [10, -95], [105, -85], [145, -35], [120, 20], [135, 75], [75, 115], [-20, 100],
       [-55, 50], [-120, 40], [-140, -25]],
-    road: '#e6d3b3', line: '#c98a4b', curbs: ['#ffcf3f', '#fffdf6'], border: 'marshmallow', borderStep: 2,
+    road: '#e6d3b3', line: '#c98a4b', curbs: ['#ffcf3f', '#fffdf6'], verge: '#f2e6cc', border: 'marshmallow', borderStep: 2,
     ground: (x, y) => (Math.floor(x / 10) + Math.floor(y / 10)) % 2 ? '#fffdf6' : '#b9d9ee',  // tiles
     sky: [0.96, 0.85, 0.62], hills: null, clouds: false,
     props: [[0.22, mug], [0.14, toaster], [0.3, fruit], [0.18, jar], [0.16, cookie]], count: 90,
@@ -1548,7 +1655,7 @@ const TRACKS = [
     ctrl: [[-110, -110], [0, -115], [90, -110], [130, -85], [120, -52], [80, -45], [0, -50], [-60, -45], [-90, -20], [-75, 8],
       [-30, 12], [40, 8], [100, 15], [130, 42], [115, 72], [70, 75], [10, 75], [-50, 85], [-70, 115], [-110, 120], [-140, 90],
       [-145, 20], [-140, -60]],
-    road: '#d3dbe6', line: '#8fb4d9', curbs: ['#e2483b', '#fffdf6'], border: 'snowbank', borderStep: 3,
+    road: '#d3dbe6', line: '#8fb4d9', curbs: ['#e2483b', '#fffdf6'], verge: '#c6d6ea', border: 'snowbank', borderStep: 3,
     ground: (x, y) => (Math.sin(x * 0.05) * Math.cos(y * 0.043) + Math.sin(x * 0.11 + y * 0.07) * 0.5 > 0.6 ? '#e6eef7' : '#f7f9fc'),
     sky: [0.74, 0.84, 0.95], hills: ['#f4f7fb', '#dfe8f2'], clouds: true,
     props: [[0.55, snowPine], [0.2, snowman], [0.25, rock]], count: 220,
@@ -1561,7 +1668,7 @@ const TRACKS = [
     ctrl: [[-120, -100], [-60, -105], [-30, -92], [0, -108], [30, -92], [60, -108], [110, -100], [135, -60], [112, -25],
       [130, 10], [112, 45], [135, 80], [110, 115], [60, 120], [30, 100], [0, 120], [-40, 115], [-70, 80], [-55, 45], [-80, 15],
       [-62, -20], [-98, -45], [-140, -62]],
-    road: '#f6ecd8', line: '#e0a96d', curbs: ['#ff9ec4', '#fffdf6'], border: 'donut', borderStep: 2,
+    road: '#f6ecd8', line: '#e0a96d', curbs: ['#ff9ec4', '#fffdf6'], verge: '#f3d8ae', border: 'donut', borderStep: 2,
     ground: (x, y) => (Math.floor(y / 7) % 2 ? '#d9a066' : '#cf955a'),     // a wooden table
     sky: [0.98, 0.88, 0.72], hills: null, clouds: false,
     props: [[0.4, cupcake], [0.15, rollingPin], [0.25, cookie], [0.1, jar], [0.1, mug]], count: 110,
@@ -1578,7 +1685,7 @@ const TRACKS = [
     ctrl: [[-110, -110], [-20, -115], [40, -100], [58, -70], [20, -52], [-20, -45], [-32, -15], [10, -2], [80, -10], [120, -40],
       [148, -10], [130, 30], [80, 40], [62, 70], [95, 95], [130, 110], [110, 140], [40, 135], [0, 110], [-20, 70], [-60, 58], [-72, 100],
       [-110, 122], [-148, 90], [-130, 40], [-90, 20], [-100, -20], [-140, -40], [-145, -85]],
-    road: '#8e8e98', line: '#fffdf6', curbs: ['#ffcf3f', '#2a2228'], border: 'block', borderStep: 2,
+    road: '#8e8e98', line: '#fffdf6', curbs: ['#ffcf3f', '#2a2228'], verge: '#c3b0de', border: 'block', borderStep: 2,
     ground: (x, y) => (Math.floor(Math.max(Math.abs(x), Math.abs(y)) / 25) % 2 ? '#7fa8d8' : '#9cc0e6'),   // a rug
     sky: [0.93, 0.9, 0.98], hills: null, clouds: false,
     props: [[0.4, blockTower], [0.3, toyBall], [0.3, crayon]], count: 120,
@@ -1598,7 +1705,7 @@ const TRACKS = [
     ctrl: [[-48, 180], [48, 190], [132, 174], [204, 192], [270, 156], [294, 84], [246, 42], [282, -12], [288, -96], [240, -168],
       [156, -186], [96, -144], [24, -180], [-60, -198], [-144, -180], [-204, -210], [-270, -168], [-276, -84], [-216, -48],
       [-144, -72], [-96, -24], [-132, 36], [-216, 48], [-270, 102], [-210, 126], [-234, 174], [-144, 192]],
-    road: '#d7b98a', line: '#fffdf6', curbs: ['#3b9fd8', '#fffdf6'], border: 'pail', borderStep: 3,
+    road: '#d7b98a', line: '#fffdf6', curbs: ['#3b9fd8', '#fffdf6'], verge: '#e0c38c', border: 'pail', borderStep: 3,
     ground: (x, y) => {
       const shore = 220 + Math.sin(x * 0.03) * 6;                            // the sea along the bottom
       if (-y > shore + 7) return '#6fbde0';
@@ -1624,7 +1731,7 @@ const TRACKS = [
     ctrl: [[-250, 60], [-255, -40], [-230, -130], [-170, -185], [-90, -190], [-40, -150], [-60, -90], [-20, -50], [50, -70],
       [80, -130], [150, -180], [230, -170], [270, -110], [250, -40], [190, -10], [200, 50], [260, 90], [250, 170], [170, 200],
       [100, 160], [40, 190], [-30, 200], [-90, 160], [-60, 100], [-110, 60], [-170, 120], [-230, 130]],
-    road: '#b48a5e', line: null, curbs: ['#e2483b', '#fffdf6'], border: 'hay', borderStep: 2,
+    road: '#b48a5e', line: null, curbs: ['#e2483b', '#fffdf6'], verge: '#cdb27a', border: 'hay', borderStep: 2,
     ground: (x, y) => {                                                       // a patchwork of fields
       const fx = Math.floor((x + Math.sin(y * 0.02) * 12) / 70), fy = Math.floor((y + Math.sin(x * 0.02) * 12) / 70);
       return ['#8cc34a', '#a2cc58', '#d8c36a', '#97c552', '#b8d46a'][((fx * 7 + fy * 13) % 5 + 5) % 5];
@@ -1647,7 +1754,7 @@ const TRACKS = [
     ctrl: [[-170, 195], [-85, 205], [0, 188], [85, 205], [170, 190], [223, 135], [189, 85], [119, 95], [51, 25], [-17, 15],
       [-85, 50], [-153, 72], [-197, 22], [-170, -28], [-93, -18], [0, -40], [94, -18], [183, -40], [223, -100], [194, -160],
       [111, -178], [17, -128], [-68, -180], [-161, -172], [-228, -120], [-251, -20], [-248, 100], [-225, 170]],
-    road: '#b0855a', line: null, curbs: ['#ffcf3f', '#4f9a3a'], border: 'bamboo', borderStep: 2,
+    road: '#b0855a', line: null, curbs: ['#ffcf3f', '#4f9a3a'], verge: '#86ab4e', border: 'bamboo', borderStep: 2,
     ground: (x, y) => (Math.sin(x * 0.06) * Math.cos(y * 0.05) + Math.sin(x * 0.13 + y * 0.09) * 0.5 > 0.5 ? '#4f9a3a' : '#5aa844'),
     sky: [0.62, 0.82, 0.86], hills: ['#4f8f3a', '#3f7a30'], clouds: true,
     props: [[0.24, palm], [0.2, vineTree], [0.22, fern], [0.16, jungleFlower], [0.1, ruin], [0.08, rock]], count: 380,
@@ -1762,6 +1869,31 @@ function buildTrack(def) {
   // How far the track reaches from the middle of the world; the ground, the
   // scenery and the hills spread out to match on the long tracks.
   const R = reachOf(), size = Math.max(700, 2 * R + 400);
+  // The hills in the distance, worked out first: under a hill the border
+  // stays close to the road (the road goes through in a tunnel).
+  const hills = [];
+  if (def.hills) {
+    const hr = rng(def.name.length * 53 + 5), count = Math.round((22 * R) / 150);
+    for (let n = 0; n < count; n++) {
+      const a = (n / count) * Math.PI * 2 + hr() * 0.2, d = R + (R > 150 ? 115 : 80) + hr() * 40, s = 40 + hr() * 40;
+      const c = new V3(Math.cos(a) * d, -s * 0.35, Math.sin(a) * d), rad = new V3(s * 1.6, s, s * 1.6);
+      // Only the main road gets tunnels, so on the long tracks no hill sits over a branch.
+      if (R > 150 && BRANCHES.some((br) => br.P.some((p) => Math.hypot(p.x - c.x, p.z - c.z) < rad.x + wallOf(br) + 2))) continue;
+      hills.push({ c, rad, n, foot: rad.x * Math.sqrt(1 - (c.y / rad.y) ** 2) });
+    }
+    const underHill = (p) => hills.some(({ c, foot }) => Math.hypot(p.x - c.x, p.z - c.z) < foot + 3);
+    for (const path of [MAIN, ...BRANCHES]) {
+      for (let i = 0; i < path.n; i++) {
+        for (const k of [0, 1]) {
+          const w = path.edge.wall[k][i], side = k ? 1 : -1;
+          if (w > nearWall(path) && [0.5, 1].some((t) => underHill(pathPoint(path, i, side * (nearWall(path) + (w - nearWall(path)) * t))))) {
+            path.edge.wall[k][i] = nearWall(path);
+          }
+        }
+      }
+      smoothEdges(path);
+    }
+  }
   parts.push(place(paint(new THREE.PlaneGeometry(size, size, size / 10, size / 10), def.ground), { r: [-Math.PI / 2, 0, 0] }));
 
   // road and curbs, one quad per step so stripes stay crisp
@@ -1789,6 +1921,12 @@ function buildTrack(def) {
       // No curb across the mouth of another road where two roads meet.
       for (const side of [-1, 1]) {
         if (!BRANCHES.length || !onOtherRoad(pathPoint(path, i + 0.5, side * (H + 0.6)), path)) strip(side * H, side * (H + 1.2), stripe, 0.05);
+        // The verge, its outer edge following its width at each end of the step.
+        const v0 = vergeAt(path, i, side), v1 = vergeAt(path, j, side);
+        if ((v0 > 0.2 || v1 > 0.2) && !onOtherRoad(pathPoint(path, i + 0.5, side * (H + 1.2 + Math.max(v0, v1) / 2)), path)) {
+          quad(pathPoint(path, i, side * (H + 1.2)), pathPoint(path, i, side * (H + 1.2 + v0)),
+            pathPoint(path, j, side * (H + 1.2 + v1)), pathPoint(path, j, side * (H + 1.2)), def.verge || '#cfc79a', 0.035);
+        }
       }
       if (path.main && i < 3) {                              // checkered start line
         for (let k = 0; k < 2 * HALF; k++) strip(-HALF + k, -HALF + k + 1, (k + i) % 2 ? '#2a2228' : '#fffdf6', 0.06);
@@ -1856,7 +1994,7 @@ function buildTrack(def) {
     const every = path.main ? def.borderStep : Math.max(1, Math.round(def.borderStep * stepOf(path) / (N / TL)));
     for (let i = 0; i < (path.main ? N : path.n); i += every) {
       for (const side of [-1, 1]) {
-        const p = pathPoint(path, i, side * (wallOf(path) + 2.4));
+        const p = pathPoint(path, i, side * (wallAt(path, i, side) + 2.4));
         if (nearTrack(p, WALL - 0.5)) continue;     // don't poke into another part of the road
         const from = parts.length;
         BORDERS[def.border](parts, r, p, i, pathHeading(path, i));
@@ -1879,7 +2017,7 @@ function buildTrack(def) {
   let placed = 0;
   while (placed < def.count) {
     const x = (r() - 0.5) * (2 * R + 160), z = (r() - 0.5) * (2 * R + 160);
-    if (nearTrack(new V3(x, 0, z), WALL + 8)) continue;
+    if (nearTrack(new V3(x, 0, z), WALL + 8) || insideBorders(new V3(x, 0, z), 3)) continue;   // not where karts can drive
     placed++;
     let k = r();
     for (const [w, fn] of def.props) {
@@ -1887,23 +2025,18 @@ function buildTrack(def) {
     }
   }
   if (def.hills) {
-    const hills = [];
-    const count = Math.round((22 * R) / 150);
-    for (let n = 0; n < count; n++) {
-      const a = (n / count) * Math.PI * 2 + r() * 0.2, d = R + (R > 150 ? 115 : 80) + r() * 40, s = 40 + r() * 40;
-      const c = new V3(Math.cos(a) * d, -s * 0.35, Math.sin(a) * d), rad = new V3(s * 1.6, s, s * 1.6);
-      // A hill over the road gets a hole cut through it for a tunnel. Only the
-      // main road gets tunnels, so on the long tracks no hill sits over a branch.
-      if (R > 150 && BRANCHES.some((br) => br.P.some((p) => Math.hypot(p.x - c.x, p.z - c.z) < rad.x + wallOf(br) + 2))) continue;
+    const over = [];
+    for (const { c, rad, n } of hills) {
+      // A hill over the road gets a hole cut through it for a tunnel.
       const overRoad = nearTrack(c.clone().setY(0), rad.x + WALL + 2);
       let g = place(paint(overRoad ? sphere(96, 48) : sphere(12, 8), def.hills[n % 2]), { p: c.toArray(), s: rad.toArray() });
       if (overRoad) {
         g = keepTriangles(g, (x, y, z) => y > TUNNEL_H + 1 || !nearTrack(new V3(x, 0, z), WALL + 2.5));
-        hills.push({ c, rad });
+        over.push({ c, rad });
       }
       parts.push(g);
     }
-    const inTunnel = tunnels(parts, hills);
+    const inTunnel = tunnels(parts, over);
     for (const [i, a, b] of edges) if (inTunnel[i]) for (let k = a; k < b; k++) parts[k] = null;
   }
   if (def.clouds) {
@@ -1963,6 +2096,11 @@ function shapeTrack(def) {
     for (const b of BRANCHES) balance(b);
   }
   BRANCHES = def.branchPaths;
+  if (!MAIN.edge) {
+    const near = roadGrid();
+    for (const path of [MAIN, ...BRANCHES]) path.edge = makeEdges(path, near, def.name.length);
+    for (const path of [MAIN, ...BRANCHES]) smoothEdges(path);
+  }
   // Jumps on the main road are a ramp to one side, for a landing boost; on a
   // branch, the ramp over its hazard, or ramps of its own just for fun.
   RAMPS = [...(def.jumps || []).map(([f, lat]) => ({ path: MAIN, f: sampleAt(f), lat: lat * HALF })),
@@ -2245,8 +2383,8 @@ function updateSound() {
   loops.lp.frequency.setTargetAtTime(300 + sp * 700, t, 0.1);
   loops.engineGain.gain.setTargetAtTime(racing ? 0.05 + sp * 0.03 : 0, t, 0.15);
   loops.squeal.gain.setTargetAtTime(racing && me.drift ? 0.025 + me.driftLv * 0.008 : 0, t, 0.05);
-  const offroad = Math.abs(me.plat) > (me.path || MAIN).half + 1.2 && me.brave <= 0 && me.airY <= 0;
-  loops.rumble.gain.setTargetAtTime(racing && offroad && me.speed > 4 ? 0.12 : 0, t, 0.08);
+  const ground = me.airY > 0 || me.brave > 0 ? 'road' : groundAt(me.path || MAIN, me.pf, me.plat);
+  loops.rumble.gain.setTargetAtTime(racing && ground !== 'road' && me.speed > 4 ? (ground === 'off' ? 0.12 : 0.05) : 0, t, 0.08);
 }
 
 const SFX = {
@@ -2534,12 +2672,16 @@ function updatePlayer(dt, canDrive) {
   const path = me.path || MAIN, lat = me.plat;
   const flying = me.airY > 0;
   const rough = !flying && hazardAt(path, me.pf);
-  const offroad = (Math.abs(lat) > path.half + 1.2 || !!rough) && !flying;
+  const ground = flying ? 'road' : groundAt(path, me.pf, lat);
+  const offroad = (ground === 'off' || !!rough) && !flying;
+  // Any speed-up (a boost, the Star, Speed Eating, Brave Mode) carries you over slow ground.
+  const quick = me.brave > 0 || me.boost > 0 || me.rush > 0;
   let target = !canDrive || me.stall > 0 ? 0
     : easy || input.gas || input.hop ? MAX_SPEED
     : input.back ? -REVERSE : 0;
   if (rough) target *= 0.35;                          // a botched jump: crawling through it
-  else if (offroad && me.brave <= 0 && me.boost <= 0) target *= track.offroad || 0.55;
+  else if (offroad && !quick) target *= track.offroad || 0.55;
+  else if (ground === 'verge' && !quick) target *= VERGE_SLOW;
   if (me.rush > 0) target *= 1.4;
   else if (me.nibble > 0) target *= 1.15;
   if (me.boost > 0 && canDrive) target = Math.max(target, MAX_SPEED * 1.3);
@@ -2574,7 +2716,7 @@ function updatePlayer(dt, canDrive) {
   // Soft hedges: slide back onto the track instead of crashing.
   const prevIdx = me.idx, prevPath = me.path, prevF = me.pf;
   locate(me);
-  const lat2 = me.plat, wall = wallOf(me.path);
+  const lat2 = me.plat, wall = wallAt(me.path, me.pf, lat2);
   me.wallCd -= dt;
   if (Math.abs(lat2) > wall) {
     me.pos.addScaledVector(pathRight(me.path, me.pf), (Math.abs(lat2) - wall) * -Math.sign(lat2));
@@ -2601,7 +2743,7 @@ function updatePlayer(dt, canDrive) {
   }
   if (prevIdx < N * 0.25 && me.idx > N * 0.75) me.lap--;
 
-  if (offroad && me.brave <= 0 && me.speed > 5 && Math.random() < dt * 14) {
+  if ((offroad || ground === 'verge') && !quick && me.speed > 5 && Math.random() < dt * (offroad ? 14 : 5)) {
     puff(me.pos.clone().setY(0.4).addScaledVector(fwdOf(me), -1.2));
   }
   if (me.stall > 0 && Math.random() < dt * 16) puff(me.pos.clone().setY(0.5).addScaledVector(fwdOf(me), -1.3), '#9a8f84', 0.5);
@@ -3136,7 +3278,7 @@ function updateEffects(dt, t) {
       b.path = MAIN;
     }
     b.lat += b.latVel * dt;
-    const edge = wallOf(b.path) - 1;
+    const edge = wallAt(b.path, b.f, b.lat) - 1;
     if (Math.abs(b.lat) > edge) {                      // bounce off the hedges
       b.lat = Math.sign(b.lat) * edge;
       b.latVel *= -1;
