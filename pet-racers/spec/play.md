@@ -21,13 +21,21 @@ The **pick screen** has two steps, one after the other:
    track from above (its roads, forks, water and jumps, on its own ground), sit in a
    grid with one row per group: **Easy** (Park, Backyard, Kitchen, Yates Mill),
    **Harder** (Snow, Bakery, Toy Room) and **Long** (Beach, Farm, Jungle), with a line
-   about the picked one underneath. **Race!** starts, and
-   **◀ Pets** goes back.
+   about the picked one underneath. Above the cards, **Slow**, **Medium** and **Fast**
+   pick the speed (see [Speeds](#speeds)). **Race!** starts, and **◀ Pets** goes back.
 
-The game remembers the last pet, track and controls picked. Each iPad picks its own
-controls, even in a room. It also keeps the best time on each track and the pet who set
-it, shown after the track's line ("· Best: 84.3 s (Mango)"). Beating it adds
+The game remembers the last pet, track, speed and controls picked. Each iPad picks its own
+controls, even in a room. It also keeps the best time on each track at each speed and the
+pet who set it, shown after the track's line ("· Best: 84.3 s (Mango)"). Beating it adds
 "· New best!" to the finish card. Any finished race counts, alone or in a room, Easy or Pro.
+
+### Speeds
+
+Like engine classes, the speed sets how hard a race is. **Slow** is the default; **Medium**
+is a quarter faster and **Fast** half as fast again as Slow (top speeds 21, 26 and 31). Everything speeds up
+together: karts, rivals, thrown items, the Bee and reversing. Steering keeps the same
+turning circle and jumps cover the same ground, just quicker, so every track drives the
+same at every speed and only the time to react shrinks. The tracks are laid out at Medium.
 
 The **harder tracks** have more and tighter corners (hairpins on Snow, zig-zags in the
 Bakery, both in the Toy Room), a narrower road, a bigger slowdown off it, and rivals a
@@ -264,7 +272,7 @@ together, and the host's pick screen keeps showing the room code so more can joi
 the pick screen takes new people: a room that's mid-race, or that already has five iPads, turns
 joiners away with a message. Two people can't have the same pet. Taken cards say "Friend",
 and anyone who joins holding a taken pet gets the first free one. The host gets **Start!**
-picks the track on the second step (other iPads stay on the pet step, follow the host's track and can't change it), and chooses **Race again!** or
+picks the track and speed on the second step (other iPads stay on the pet step, follow the host's track and speed and can't change them), and chooses **Race again!** or
 a new pick afterwards. Everyone else waits. **Leave** goes
 back to racing alone.
 

@@ -148,7 +148,7 @@
   /* The track step: the mirror of the pet step. A panel on the left with the
      tracks in a grid, one row per group, and the chosen track circling slowly
      in the space to its right. */
-  :root { --tw: clamp(56px, min(calc((100dvh - 240px) / 3 - 30px), calc((52vw - 160px) / 4 - 12px)), 140px); }
+  :root { --tw: clamp(56px, min(calc((100dvh - 280px) / 3 - 30px), calc((52vw - 160px) / 4 - 12px)), 140px); }
   #pick[data-step="track"] {
     left: calc(18px + env(safe-area-inset-left)); right: auto; bottom: auto; transform: none; width: auto;
     top: 50%; translate: 0 -50%; padding: 16px 22px 18px;
@@ -163,13 +163,15 @@
   #pick[data-step="track"] #trackInfo { max-width: calc(4 * var(--tw) + 9em); margin-left: auto; margin-right: auto; }
   /* Phones: everything on the track step a size smaller, so it fits the height. */
   @media (max-height: 520px) {
-    :root { --tw: clamp(40px, calc((100dvh - 205px) / 3 - 18px), 140px); }
+    :root { --tw: clamp(38px, calc((100dvh - 250px) / 3 - 18px), 140px); }
     /* sits at the bottom, clear of the home and sound buttons */
     #pick[data-step="track"] { padding: 8px 14px 10px; top: auto; translate: none; bottom: calc(8px + env(safe-area-inset-bottom)); }
-    #pick[data-step="track"] #tracks { gap: 6px; margin-bottom: 4px; }
+    #pick[data-step="track"] #tracks { gap: 3px; margin-bottom: 4px; }
+    #speeds { margin-bottom: 6px; }
+    #speeds button { font-size: 15px; padding: 0 12px; }
     #pick[data-step="track"] .trackSet > span { font-size: 16px; }
     #pick[data-step="track"] .tc { border-width: 3px; }
-    #pick[data-step="track"] .tc b { font-size: 9px; letter-spacing: -0.3px; }
+    #pick[data-step="track"] .tc b { font-size: 8px; letter-spacing: -0.3px; }
     #pick[data-step="track"] #trackInfo { font-size: 15px; margin-bottom: 6px; }
     #pick[data-step="track"] button#backBtn, #pick[data-step="track"] button#go { font-size: 20px; padding: 2px 20px; }
     #title.preview { font-size: 36px; }
@@ -197,6 +199,13 @@
   }
   #modes button { font-size: 18px; padding: 0 14px; }
   #modes button.on { background: #ffe58a; opacity: 1; }
+  #speeds { display: flex; justify-content: center; gap: 10px; margin: 0 0 12px; }
+  #speeds button {
+    font: inherit; font-size: 20px; color: var(--ink); padding: 0 18px; cursor: pointer; opacity: 0.6;
+    background: var(--paper); border: 3px solid var(--ink); border-radius: 18px 6px 18px 6px / 6px 18px 6px 18px;
+  }
+  #speeds button.on { background: #ffe58a; opacity: 1; }
+  #speeds.locked button { pointer-events: none; }
   #tracks.locked button { pointer-events: none; }
   #pickName { font-size: 32px; font-weight: normal; margin-right: 8px; }
   #card {
@@ -265,6 +274,7 @@
     <div id="cards" class="pet-step"></div>
     <div id="modes" class="pet-step"></div>
     <div id="pickInfo" class="pet-step"><span id="pickName"></span><span id="pickKart"></span></div>
+    <div id="speeds" class="track-step"></div>
     <div id="tracks" class="track-step"></div>
     <div id="trackInfo" class="track-step"></div>
     <div id="netStatus" class="hidden"></div>
@@ -1103,8 +1113,14 @@ for (const r of RACERS) {
 // built the first time it's picked and kept after that.
 // ---------------------------------------------------------------------------
 let N = 800;             // samples around the current track: 800, or more on the long ones
-const MAX_SPEED = 26;    // a kart's top speed, units a second
-const TURN = 1.7 * MAX_SPEED / 26;   // how fast steering turns the kart: keeps the turning circle as it was at 26
+// Speeds, like engine classes: everything gets quicker together (karts,
+// rivals, items), while the courses stay the same. Medium is BASE_SPEED, and
+// the tracks are laid out for it, so they're the same at every speed.
+const BASE_SPEED = 26;
+const SPEEDS = { Slow: 0.8, Medium: 1, Fast: 1.2 };
+let speedName = 'Slow', speedK = 1;
+let MAX_SPEED = BASE_SPEED;   // a kart's top speed, units a second
+let TURN = 1.7;               // how fast steering turns the kart: same turning circle at every speed
 let HALF = 7;            // half the road width (narrower on the harder tracks)
 let WALL = HALF + 3.5;   // where the border stops you
 const wrap = (f) => ((f % N) + N) % N;
@@ -1193,14 +1209,15 @@ function makeBranch(b) {
 // J is how far a kart flies off a ramp at full speed (boosted by the ramp). A gap a third of J is hard to miss
 // at any speed; one nearly J long needs full speed and the ramp hit square.
 // Scaled with top speed so a jump covers the same ground (same arc, just quicker).
-const JUMP_V = 9 * MAX_SPEED / 26, GRAVITY = 24 * (MAX_SPEED / 26) ** 2;
+let JUMP_V = 9, GRAVITY = 24;
 const RAMP_BOOST = 1.3;          // a ramp is a boost ramp: it launches you 30% faster, up to boost speed
 const RAMP_LEN = 4, RAMP_H = 0.9, RAMP_W = 3.2;
-const jumpLength = (speed) => speed * 2 * JUMP_V * THREE.MathUtils.clamp(speed / MAX_SPEED, 0.5, 1.2) / GRAVITY;
+// How far a jump flies, laying out the tracks, so at Medium (it's the same at every speed).
+const jumpLength = (speed) => speed * 2 * 9 * THREE.MathUtils.clamp(speed / BASE_SPEED, 0.5, 1.2) / 24;
 const HAZARD_COST = { rough: 1.6, water: 3 };       // seconds a botched jump costs
 const SNACK_COST = 0.35, PAD_GAIN = 0.3, MAX_RISK = 0.75;
 function balance(br) {
-  const cruise = MAX_SPEED * 0.95;
+  const cruise = BASE_SPEED * 0.95;
   const skipsSnacks = snacks.some((p) => !p.off && wrap(p.f - br.from) < br.span);
   const savedBy = () => ((br.span / N) * TL - br.len) / cruise + (br.padAt.length + br.jumpAt.length) * PAD_GAIN - (skipsSnacks ? SNACK_COST : 0);
   br.saved = savedBy();
@@ -1217,7 +1234,7 @@ function balance(br) {
   if (!br.hazard) { console.warn('Pet Racers: a shortcut with no hazard', br); return; }
   const cost = HAZARD_COST[br.hazard];
   const count = Math.ceil(br.saved / (MAX_RISK * cost));
-  const gapFor = (risk) => jumpLength(MAX_SPEED * RAMP_BOOST) * (0.35 + 0.6 * risk) - RAMP_LEN;
+  const gapFor = (risk) => jumpLength(BASE_SPEED * RAMP_BOOST) * (0.35 + 0.6 * risk) - RAMP_LEN;
   // Each on the straightest stretch of the branch left, away from its ends.
   // Room is set aside for the longest gap there could be.
   const step = stepOf(br), need = (RAMP_LEN + gapFor(1) + 6) * step;
@@ -2580,10 +2597,10 @@ function addBall(owner, id, f, lat, latVel, kind = 'ball', pi = 0) {
   const m = mesh(cherry ? cherryGeo : ballGeo);
   m.scale.setScalar(cherry ? 1 : 0.6);
   scene.add(m);
-  balls.push({ id, owner, m, life: cherry ? 4 : 5, f, lat, latVel, speed: cherry ? 54 : 42, cherry, bounces: 0, path: BRANCHES[pi - 1] || MAIN });
+  balls.push({ id, owner, m, life: cherry ? 4 : 5, f, lat, latVel, speed: (cherry ? 54 : 42) * speedK, cherry, bounces: 0, path: BRANCHES[pi - 1] || MAIN });
 }
 // The Bee: flies at its target, turning toward it, over hedges and grass.
-const BEE_SPEED = 40, BEE_TURN = 3.2;
+let BEE_SPEED = 40, BEE_TURN = 3.2;
 const beeGeo = merge([
   place(paint(sphere(10, 7), (x, y, z) => (Math.floor((z + 1) * 2.5) % 2 ? '#2a2228' : '#ffcf3f')), { s: [0.45, 0.42, 0.65] }),
   place(paint(sphere(8, 5), '#ffffff'), { p: [0.42, 0.38, -0.05], r: [0, 0, -0.5], s: [0.45, 0.08, 0.3] }),
@@ -2876,7 +2893,7 @@ const latOf = (pos, i) => pos.clone().sub(TP[i]).dot(TR[i]);
 // away widens it. A longer drift builds blue, then orange, then purple sparks,
 // and letting go with sparks showing gives a boost. Holding Go while "2" is
 // up in the countdown is a rocket start; holding it from "3" stalls.
-const REVERSE = 8;
+let REVERSE = 8;
 const HOP_TIME = 0.3;
 const SPARKS = [                      // drift time needed, boost seconds
   { at: 0.8, boost: 0.6, color: '#3d9bff' },
@@ -2901,12 +2918,12 @@ function updateHop(me, dt, want, canDrive) {
     if (me.hopT === 0) { me.hopY = 0; puff(me.pos.clone().setY(0.3).addScaledVector(fwdOf(me), -1)); }
   }
   // On the ground, still holding Hop from the hop, steering: start drifting.
-  if (!me.drift && me.hopHeld && me.hopT <= 0 && Math.abs(want) > 0.3 && me.speed > 10) {
+  if (!me.drift && me.hopHeld && me.hopT <= 0 && Math.abs(want) > 0.3 && me.speed > 10 * speedK) {
     me.drift = Math.sign(want);
     me.charge = 0;
   }
   if (!me.drift) { me.driftLv = 0; return; }
-  if (me.spin > 0 || me.speed < 6 || !canDrive) {       // lost it: no boost
+  if (me.spin > 0 || me.speed < 6 * speedK || !canDrive) {       // lost it: no boost
     me.drift = 0; me.driftLv = 0; me.hopHeld = false;
     return;
   }
@@ -3900,7 +3917,7 @@ function updateRoster() {
   friends = net.guests.filter((g) => g.pet).map((g) => racerNamed(g.pet));
   dropFriends(before.filter((r) => !friends.includes(r)));
   rivals = RACERS.filter((r) => !isHuman(r));
-  send({ t: 'roster', track: track.name, list: [[net.peer.id, player.name], ...net.guests.filter((g) => g.pet).map((g) => [g.id, g.pet])] });
+  send({ t: 'roster', track: track.name, speed: speedName, list: [[net.peer.id, player.name], ...net.guests.filter((g) => g.pet).map((g) => [g.id, g.pet])] });
   if (state === 'title') resetRace();
   updatePickUi();
 }
@@ -3923,6 +3940,7 @@ function onHostMessage(m) {
       const first = !net.roster.length;
       net.roster = m.list;
       loadTrack(TRACKS.find((d) => d.name === m.track) || track);
+      applySpeed(m.speed);
       const mine = m.list.find(([id]) => id === net.peer.id);
       if (mine && mine[1] !== player.name) setPlayer(racerNamed(mine[1]));
       const before = friends;
@@ -3934,7 +3952,7 @@ function onHostMessage(m) {
       break;
     }
     case 'no': netError({ type: m.why }); break;
-    case 'start': loadTrack(TRACKS.find((d) => d.name === m.track) || track); startRace(); break;
+    case 'start': loadTrack(TRACKS.find((d) => d.name === m.track) || track); applySpeed(m.speed); startRace(); break;
     case 'lobby': backToPick(); break;
     case 's':
       for (const [pet, ...p] of m.all) {
@@ -4260,14 +4278,42 @@ function setPro(on) {
   updatePickUi();
 }
 
-// Best time on each track, with the pet who set it, kept on this iPad.
+// Slow, Medium or Fast: picked on the track step, by the host in a room.
+const SPEED_KEY = 'pet-racers-speed';
+function applySpeed(name) {
+  speedName = SPEEDS[name] ? name : 'Slow';
+  speedK = SPEEDS[speedName];
+  MAX_SPEED = BASE_SPEED * speedK;
+  TURN = 1.7 * speedK;
+  JUMP_V = 9 * speedK; GRAVITY = 24 * speedK ** 2;
+  BEE_SPEED = 40 * speedK; BEE_TURN = 3.2 * speedK;
+  REVERSE = 8 * speedK;
+}
+for (const name of Object.keys(SPEEDS)) {
+  const b = document.createElement('button');
+  b.textContent = name;
+  b.dataset.speed = name;
+  b.addEventListener('click', () => chooseSpeed(name));
+  $('speeds').append(b);
+}
+function chooseSpeed(name) {
+  if (isGuest()) return;
+  applySpeed(name);
+  try { localStorage.setItem(SPEED_KEY, speedName); } catch (e) { /* private mode */ }
+  if (net.host) updateRoster();
+  updatePickUi();
+}
+
+// Best time on each track at each speed, with the pet who set it, kept on
+// this iPad. Medium's are kept under the plain track name (from before speeds).
 const BEST_KEY = 'pet-racers-best';
+const bestKey = () => (speedName === 'Medium' ? track.name : `${track.name} · ${speedName}`);
 let bests = {};
 try { bests = JSON.parse(localStorage.getItem(BEST_KEY)) || {}; } catch (e) { bests = {}; }
 function saveBest(time) {
-  const b = bests[track.name];
+  const b = bests[bestKey()];
   if (b && b.time <= time) return false;
-  bests[track.name] = { time: +time.toFixed(1), pet: player.name };
+  bests[bestKey()] = { time: +time.toFixed(1), pet: player.name };
   try { localStorage.setItem(BEST_KEY, JSON.stringify(bests)); } catch (e) { /* private mode */ }
   return true;
 }
@@ -4289,7 +4335,9 @@ function updatePickUi() {
     el.classList.toggle('taken', friends.some((r) => r.name === el.dataset.name));
   }
   for (const el of $('tracks').querySelectorAll('button')) el.classList.toggle('on', el.dataset.name === track.name);
-  const best = bests[track.name];
+  const best = bests[bestKey()];
+  for (const el of $('speeds').children) el.classList.toggle('on', el.dataset.speed === speedName);
+  $('speeds').classList.toggle('locked', guest);
   $('trackInfo').textContent = track.blurb + (best ? ` · Best: ${best.time.toFixed(1)} s (${best.pet})` : '');
   for (const el of $('modes').children) el.classList.toggle('on', el.dataset.pro === String(pro));
   $('tracks').classList.toggle('locked', guest);
@@ -4300,7 +4348,7 @@ function updatePickUi() {
   $('netStatus').classList.toggle('hidden', !room);
   $('netStatus').textContent = net.host
     ? `Room ${net.code} · ${n} friend${n === 1 ? '' : 's'} here · ${pickStep === 'pet' ? 'tap Next when everyone has a pet' : 'tap Start when everyone’s ready'}`
-    : `Room ${net.code} · ${n + 1} racers · ${track.name} · the room maker picks the track and starts`;
+    : `Room ${net.code} · ${n + 1} racers · ${track.name} · ${speedName} · the room maker picks the track and starts`;
   $('again').classList.toggle('hidden', guest);
   $('other').classList.toggle('hidden', guest);
   $('cardWait').classList.toggle('hidden', !guest);
@@ -4346,7 +4394,7 @@ $('net').addEventListener('click', (e) => {
 });
 
 function startRace() {
-  if (net.host) send({ t: 'start', track: track.name });
+  if (net.host) send({ t: 'start', track: track.name, speed: speedName });
   showNet(null);
   resetRace();
   const fwd = fwdOf(player);
@@ -4591,6 +4639,8 @@ try { saved = localStorage.getItem(TRACK_KEY); } catch (e) { saved = null; }
 chooseTrack(TRACKS.find((d) => d.name === saved) || TRACKS[0]);
 try { saved = localStorage.getItem(MODE_KEY); } catch (e) { saved = null; }
 setPro(saved === 'pro');
+try { saved = localStorage.getItem(SPEED_KEY); } catch (e) { saved = null; }
+chooseSpeed(saved || 'Slow');
 setState('title');
 
 let last = performance.now();
