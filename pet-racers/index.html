@@ -1827,17 +1827,39 @@ function keepTriangles(geo, keep) {
 
 // Tunnels: a stone arch over the road wherever it runs through a hill, with a
 // portal at each end that covers the hole cut in the hill.
-const TUNNEL_H = 7.5;
-function tunnels(parts, hills) {
-  if (!hills.length) return [];
+const TUNNEL_H = 7.5, TUNNEL_W = () => WALL + 1.2, PORTAL = 5;
+// Which main-road samples are in a tunnel: where the road edges or the arch's
+// top would be inside a hill, and a little past each end for the portals.
+function tunnelSamples(hills) {
   const inHill = (p) => hills.some(({ c, rad }) =>
     ((p.x - c.x) / rad.x) ** 2 + ((p.y - c.y) / rad.y) ** 2 + ((p.z - c.z) / rad.z) ** 2 < 1);
   const covered = [];
   for (let i = 0; i < N; i++) {
     covered[i] = [[-WALL, 1], [0, 1], [WALL, 1], [0, TUNNEL_H]].some(([lat, y]) => inHill(trackPoint(i, lat).setY(y)));
   }
-  const inTunnel = covered.map((_, i) => [...Array(11)].some((_, k) => covered[wrap(i + k - 5)]));   // a little past each end
-  const K = 12, W = WALL + 1.2;
+  return covered.map((_, i) => [...Array(11)].some((_, k) => covered[wrap(i + k - 5)]));
+}
+// Would a tunnel through this hill, its portals included, stand on another
+// road: a branch, or another part of the lap that comes close?
+function tunnelBlocks(hill) {
+  const inTunnel = tunnelSamples([hill]), reach = TUNNEL_W() + PORTAL;
+  for (let i = 0; i < N; i++) {
+    if (!inTunnel[i]) continue;
+    const p = trackPoint(i, 0);
+    for (const path of [MAIN, ...BRANCHES]) {
+      const clear = reach + path.half + 1.2 + 1;
+      for (let k = 0; k < path.n; k++) {
+        if (path.main && Math.min(wrap(k - i), wrap(i - k)) * (TL / N) < 2 * clear) continue;   // the tunnel's own stretch
+        if (Math.hypot(path.P[k].x - p.x, path.P[k].z - p.z) < clear) return true;
+      }
+    }
+  }
+  return false;
+}
+function tunnels(parts, hills) {
+  if (!hills.length) return [];
+  const inTunnel = tunnelSamples(hills);
+  const K = 12, W = TUNNEL_W();
   const arch = (i, k, w = W, h = TUNNEL_H) => {
     const a = (k / K) * Math.PI;
     return trackPoint(i, w * Math.cos(a)).setY(h * Math.sin(a));
@@ -1854,7 +1876,7 @@ function tunnels(parts, hills) {
     // A portal where the tunnel starts or ends: stone from the arch out to a rectangle.
     for (const [at, edge] of [[i, !inTunnel[wrap(i - 1)]], [j, !inTunnel[wrap(j)]]]) {
       if (!edge) continue;
-      const Wo = W + 5, Ho = TUNNEL_H + 5;
+      const Wo = W + PORTAL, Ho = TUNNEL_H + PORTAL;
       // Where the ray out from the arch at step k meets the rectangle, and which side.
       const outer = (k) => {
         const a = (k / K) * Math.PI, cx = Math.cos(a), sy = Math.sin(a);
@@ -1914,9 +1936,12 @@ function buildTrack(def) {
     for (let n = 0; n < count; n++) {
       const a = (n / count) * Math.PI * 2 + hr() * 0.2, d = R + (R > 150 ? 115 : 80) + hr() * 40, s = 40 + hr() * 40;
       const c = new V3(Math.cos(a) * d, -s * 0.35, Math.sin(a) * d), rad = new V3(s * 1.6, s, s * 1.6);
-      // Only the main road gets tunnels, so on the long tracks no hill sits over a branch.
-      if (R > 150 && BRANCHES.some((br) => br.P.some((p) => Math.hypot(p.x - c.x, p.z - c.z) < rad.x + wallOf(br) + 2))) continue;
-      hills.push({ c, rad, n, foot: rad.x * Math.sqrt(1 - (c.y / rad.y) ** 2) });
+      // Only the main road gets tunnels, so no hill sits over a branch, and none
+      // whose tunnel would stand across a branch or another part of the lap.
+      if (BRANCHES.some((br) => br.P.some((p) => Math.hypot(p.x - c.x, p.z - c.z) < rad.x + wallOf(br) + 2))) continue;
+      const hill = { c, rad, n, foot: rad.x * Math.sqrt(1 - (c.y / rad.y) ** 2) };
+      if (tunnelBlocks(hill)) continue;
+      hills.push(hill);
     }
     const underHill = (p) => hills.some(({ c, foot }) => Math.hypot(p.x - c.x, p.z - c.z) < foot + 3);
     for (const path of [MAIN, ...BRANCHES]) {

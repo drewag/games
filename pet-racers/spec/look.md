@@ -69,7 +69,7 @@ ground, with hazards in their colors, jumps as orange dots and a checkered start
 
 Where a big hill in the distance reaches over the road (on the Snow, Backyard, Park and
 long tracks), the road goes through it in a **tunnel**: a grey stone arch with a stone portal
-at each end, and no border inside.
+at each end, and no border inside. Hills and tunnels never stand across another road.
 
 ## The drawn style
 

@@ -48,7 +48,10 @@ turn per 5 units. The kart steers about 20° in that distance at full speed, and
 steering help and grass cover a little more. The Park peaks at 24°, the Backyard at 14°
 and the Kitchen at 18°.
 
-Hills are placed around the edge without looking at the road. Any hill that reaches it is
+Hills are placed around the edge without looking at the road, then some are left out so
+nothing stands in the way of a road: only the main road gets tunnels, so a hill that would
+reach a branch is dropped, and so is one whose tunnel (arch and portals) would come within
+a road's width of a branch or another part of the lap. Any hill that reaches the road is
 built finer, has the triangles over the road cut away, and gets a tunnel wherever the
 road edges or the arch's top would be inside it, plus five samples at each end for the
 portals. Border pieces inside a tunnel are left out.
