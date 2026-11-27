@@ -18,7 +18,7 @@ The **pick screen** has two steps, one after the other:
 2. **A track.** The camera rises high over the track and slowly circles it. The tracks
    sit in one row of cards, each with a picture of the track from above (its roads,
    forks, water and jumps, on its own ground), in three groups: **Easy** (Park,
-   Backyard, Kitchen), **Harder** (Snow, Bakery, Toy Room) and **Long** (Beach, Farm,
+   Backyard, Kitchen, Yates Mill), **Harder** (Snow, Bakery, Toy Room) and **Long** (Beach, Farm,
    Jungle), with a line about the picked one underneath. **Race!** starts, and
    **◀ Pets** goes back.
 
@@ -46,6 +46,7 @@ Every track but the Park has **forks** and **jumps**:
 | Park | none | none |
 | Backyard | a shortcut through the garden, over long grass | one on the long diagonal |
 | Kitchen | two boost lanes, round the outside of the right-hand wiggle and of the bottom dip | one on the top straight |
+| Yates Mill | along the top of the dam past the mill, with a jump over the spillway (the main road runs below it, by the creek, and crosses the stream on a plank bridge under the old steel bridge), and a wooden boardwalk across the pond with a jump over a gap | one by the creek |
 | Snow | a shortcut across the bottom-left corner, over an icy creek | one on the middle straight, after a boost pad |
 | Bakery | a boost lane past the top zig-zags, and a shortcut across the top-right corner over syrup | one on the left side |
 | Toy Room | two narrow shortcuts, across the bulge in the hook and across the neck of the bottom-right loop, each over bath water | one on the first straight |

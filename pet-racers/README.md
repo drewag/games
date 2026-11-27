@@ -1,7 +1,7 @@
 # Pet Racers
 
 A kart racer for Ruby (9) and Zachary (7). You pick one of the nine pets from the
-character cards and race the other eight around one of nine tracks: a park, a backyard and a kitchen counter, the harder snowy mountain, bakery and toy room, or the long beach, farm and jungle, about twice round with whole other roads to pick from. Each pet drives a kart
+character cards and race the other eight around one of ten tracks: a park, a backyard, a kitchen counter and Yates Mill (a real millpond near Raleigh, NC), the harder snowy mountain, bakery and toy room, or the long beach, farm and jungle, about twice round with whole other roads to pick from. Each pet drives a kart
 made from their favorite food and has one **power** taken from their card. Snacks on the track
 give **items**: a banana peel, a cherry that bounces off the walls, a bee that chases the kart ahead, a hot pepper, your pet's power, or (mostly at the back) a star that makes you fast and brave at once. What you get depends on your place. Boost
 pads on the straights give a burst of speed. All but the Park have forks, where the road

@@ -1596,6 +1596,206 @@ function vineTree(parts, r, x, z) {
   }
 }
 
+// Yates Mill (a real place near Raleigh, NC): autumn woods round a millpond, the old mill and its waterwheel at
+// one end of the dam, the waterfall over the dam, and the creek below it
+// running under an old steel bridge.
+function autumnTree(parts, r, x, z) {
+  const h = 3 + r() * 3, s = 2.4 + r() * 1.6;
+  parts.push(place(paint(new THREE.CylinderGeometry(0.35, 0.55, h, 7), '#6b4a33'), { p: [x, h / 2, z] }));
+  const c = pick1(r, ['#e07b2a', '#e8b83a', '#c8432b', '#d9962f', '#7f9a3a']);
+  parts.push(place(paint(sphere(9, 7), c), { p: [x, h + s * 0.7, z], s: [s, s * 0.9, s] }));
+  parts.push(place(paint(sphere(8, 6), c), { p: [x + s * 0.5, h + s * 1.2, z - s * 0.3], s: [s * 0.6, s * 0.55, s * 0.6] }));
+}
+function leafPile(parts, r, x, z) {
+  for (let k = 0; k < 3; k++) {
+    parts.push(place(paint(sphere(7, 4), pick1(r, ['#c8432b', '#e07b2a', '#e8b83a', '#a8743a'])),
+      { p: [x + (r() - 0.5) * 2.5, 0.1, z + (r() - 0.5) * 2.5], s: [1.2, 0.35, 1] }));
+  }
+}
+// A little white sign on a post, with red lettering drawn as stripes.
+function sign(parts, x, z, a) {
+  parts.push(place(paint(box(), '#8a7a66'), { p: [x, 1.4, z], r: [0, a, 0], s: [0.25, 2.8, 0.25] }));
+  parts.push(place(paint(new THREE.BoxGeometry(1, 1, 1, 1, 6, 1), (px, py, pz) => (Math.abs(pz) > 0.45 && Math.floor((py + 0.5) * 6) % 2 && Math.abs(px) < 0.35 ? '#b8283a' : '#fffdf6')),
+    { p: [x, 3, z], r: [0, a, 0], s: [1.9, 1.3, 0.12] }));
+}
+// A building with board walls and a steep shingled roof, its ridge along x.
+function shed(parts, x, z, w, d, h, y0 = 0) {
+  parts.push(place(paint(new THREE.BoxGeometry(1, 1, 1, 1, Math.round(h * 1.4), 1), (px, py) => (Math.floor((py + 0.5) * h * 1.4) % 2 ? '#6a5848' : '#5e4e40')),
+    { p: [x, y0 + h / 2, z], s: [w, h, d] }));
+  const top = y0 + h, k = d / Math.SQRT2;
+  parts.push(place(paint(box(), '#625244'), { p: [x, top, z], r: [Math.PI / 4, 0, 0], s: [w, k, k] }));       // the gable ends
+  for (const side of [-1, 1]) {
+    parts.push(place(paint(box(), '#4a4038'), { p: [x, top + d / 4 + 0.25, z + side * d / 4], r: [side * Math.PI / 4, 0, 0], s: [w + 1.4, 0.4, d * 0.78] }));
+  }
+}
+// The waterwheel, facing the same way as the dam, its axle along z, built
+// round the axle so it can turn: see yatesLive.
+const wheelAt = (x, z) => ({ x: x - 14, y: 5.6, z, R: 5.4 });
+function wheelParts(R) {
+  const parts = [place(paint(new THREE.CylinderGeometry(R - 0.3, R - 0.3, 1.8, 20, 1, true), (px, py, pz) => (Math.floor((Math.atan2(px, pz) + Math.PI) * 20 / Math.PI) % 2 ? '#5a3a22' : '#4a2e1a')),
+    { r: [Math.PI / 2, 0, 0] })];
+  for (const side of [-1, 1]) {
+    parts.push(place(paint(new THREE.TorusGeometry(R, 0.3, 5, 24), '#7a5232'), { p: [0, 0, side * 1.05] }));
+    for (let k = 0; k < 4; k++) {
+      parts.push(place(paint(box(), '#7a5232'), { p: [0, 0, side * 1.1], r: [0, 0, (k * Math.PI) / 4], s: [0.3, 2 * R, 0.35] }));
+    }
+  }
+  for (let k = 0; k < 16; k++) {                                     // the buckets round the rim
+    const a = (k / 16) * Math.PI * 2;
+    parts.push(place(paint(box(), '#3f2716'), { p: [Math.cos(a) * (R - 0.1), Math.sin(a) * (R - 0.1), 0], r: [0, 0, a], s: [0.9, 0.15, 1.9] }));
+  }
+  return parts;
+}
+function mill(parts, x, z) {
+  // Stone foundation, three storeys of weathered boards, and a lower wing.
+  parts.push(place(paint(new THREE.BoxGeometry(1, 1, 1, 6, 3, 6), (px, py, pz) => ((Math.floor((px + 0.5) * 6) + Math.floor((py + 0.5) * 3) + Math.floor((pz + 0.5) * 6)) % 2 ? '#a08a6e' : '#8f7b62')),
+    { p: [x, 2, z], s: [16.6, 4, 14.6] }));
+  shed(parts, x, z, 16, 14, 14, 4);
+  shed(parts, x + 13, z + 1, 10, 11, 7, 4);
+  for (const dx of [-4, 4]) parts.push(place(paint(box(), '#4a3c30'), { p: [x + 13 + dx, 2, z + 1], s: [0.8, 4, 0.8] }));   // the wing's posts
+  // Windows: on the end facing the wheel and along the front.
+  for (const wy of [7.5, 11.5, 15.5]) {
+    for (const wz of [-3.5, 3.5]) parts.push(place(paint(box(), '#2a2228'), { p: [x - 8.05, wy, z + wz], s: [0.2, 2.2, 1.6] }));
+    for (const wx of [-4.5, 0, 4.5]) parts.push(place(paint(box(), '#2a2228'), { p: [x + wx, wy, z - 7.05], s: [1.6, 2.2, 0.2] }));
+  }
+  parts.push(place(paint(box(), '#2a2228'), { p: [x - 8.05, 20.5, z], s: [0.2, 1.8, 1.4] }));   // up in the gable
+  // The waterwheel on the dam end, on a stone pier, with the flume above it.
+  const { x: wx, y: wy, z: wz, R } = wheelAt(x, z);
+  parts.push(place(paint(new THREE.CylinderGeometry(0.5, 0.5, 6, 8), '#3a3a3a'), { p: [wx, wy, wz - 2], r: [Math.PI / 2, 0, 0] }));   // the axle
+  parts.push(place(paint(new THREE.BoxGeometry(1, 1, 1, 3, 3, 3), (px, py, pz) => ((Math.floor((px + 0.5) * 3) + Math.floor((py + 0.5) * 3) + Math.floor((pz + 0.5) * 3)) % 2 ? '#9a7a5e' : '#86694f')),
+    { p: [wx, 2.4, wz - 4.2], s: [5, 4.8, 3] }));
+  // The flume: a wooden trough from the dam to the top of the wheel, on trestles.
+  const fx0 = x - 36, fx1 = wx + 1, fy = wy + R + 1.3;
+  parts.push(place(paint(box(), '#b08a58'), { p: [(fx0 + fx1) / 2, fy, wz], s: [fx1 - fx0, 1.4, 2.6] }));
+  parts.push(place(paint(box(), '#6fa3b8'), { p: [(fx0 + fx1) / 2, fy + 0.6, wz], s: [fx1 - fx0 - 0.4, 0.2, 2] }));
+  for (let fx = fx0 + 2; fx < fx1 - 1; fx += 4) {
+    for (const side of [-1, 1]) {
+      parts.push(place(paint(box(), '#c9a274'), { p: [fx, fy / 2, wz + side * 1.4], s: [0.4, fy, 0.4] }));
+      parts.push(place(paint(box(), '#c9a274'), { p: [fx, fy + 1.4, wz + side * 1.4], s: [0.3, 1.6, 0.3] }));
+    }
+  }
+  for (const side of [-1, 1]) parts.push(place(paint(box(), '#c9a274'), { p: [(fx0 + fx1) / 2, fy + 2.1, wz + side * 1.4], s: [fx1 - fx0, 0.3, 0.3] }));
+}
+// The dam: a long dark stone wall with water pouring down its face, foam at
+// the bottom, and granite slabs in the pool below.
+const DAM_H = 7;
+const damFlows = (cx) => Math.sin(cx * 1.7) + Math.sin(cx * 0.63 + 1) > -0.5;    // which 1-unit columns the water pours down
+function dam(parts, r, x0, x1, z) {
+  const len = x1 - x0, H = DAM_H;
+  parts.push(place(paint(new THREE.BoxGeometry(1, 1, 1, Math.round(len), 6, 1), (px, py, pz) => {
+    const cx = Math.floor((px + 0.5) * len), row = Math.floor((py + 0.5) * 6);       // whole cells, so the streaks stay square
+    if (pz < -0.4 && damFlows(cx)) return row === 5 ? '#c9d6d8' : '#dce8ec';
+    return Math.floor(cx / 3 + row * 0.5) % 2 ? '#5e574e' : '#504a43';
+  }), { p: [(x0 + x1) / 2, H / 2, z], s: [len, H, 2.4] }));
+  for (let x = x0 + 1; x < x1; x += 2.2) {
+    parts.push(place(paint(sphere(7, 4), r() < 0.5 ? '#fffdf6' : '#e8eef0'), { p: [x + r(), 0.25, z - 2 - r()], s: [1.6, 0.5, 1.4] }));
+  }
+  for (let k = 0; k < 7; k++) {
+    const s = 2 + r() * 3;
+    parts.push(place(paint(sphere(7, 4), pick1(r, ['#a8a29a', '#968f86', '#b8b2a8'])),
+      { p: [x0 + r() * len, 0.2, z - 6 - r() * 12], r: [0, r() * 3, 0], s: [s * 1.6, s * 0.25, s] }));
+  }
+}
+// The old road bridge over the creek: a concrete deck on rusty steel posts,
+// with the guard rail along the top. The race goes underneath, along the creek.
+function oldBridge(parts, at) {
+  const c = trackPoint(at, 0), rt = TR[Math.floor(at)], fw = TT[Math.floor(at)], a = Math.atan2(rt.x, rt.z);
+  const pt = (along, lat, y) => [c.x + fw.x * along + rt.x * lat, y, c.z + fw.z * along + rt.z * lat];
+  const Y = 8.2, L = 60;
+  parts.push(place(paint(new THREE.BoxGeometry(1, 1, 1, 1, 1, 20), (px, py, pz) => (Math.floor((pz + 0.5) * 20) % 3 ? '#a49c8e' : '#958d80')),
+    { p: pt(0, 0, Y), r: [0, a, 0], s: [10, 1.6, L] }));
+  for (const side of [-1, 1]) {
+    parts.push(place(paint(box(), '#8f877a'), { p: pt(side * 4.6, 0, Y + 1.4), r: [0, a, 0], s: [0.8, 1.4, L] }));      // the curb walls
+    parts.push(place(paint(box(), '#b9b3a8'), { p: pt(side * 4.8, 0, Y + 3), r: [0, a, 0], s: [0.25, 0.6, L] }));       // the guard rail
+    for (let l = -L / 2 + 2; l < L / 2; l += 4) {
+      parts.push(place(paint(box(), '#d6d2c8'), { p: pt(side * 4.8, l, Y + 2.4), r: [0, a, 0], s: [0.4, 1.8, 0.4] }));
+    }
+    for (const lat of [-(WALL + 2), WALL + 2, -22, 22]) {                                                              // rusty I-beam posts
+      for (const along of [-3.2, 3.2]) {
+        parts.push(place(paint(new THREE.BoxGeometry(1, 1, 1, 1, 5, 1), (px, py) => (Math.floor((py + 0.5) * 5 + along) % 3 ? '#7a4a2e' : '#5e4a52')),
+          { p: pt(along + side * 0, lat, Y / 2 - 0.4), r: [0, a, 0], s: [0.9, Y - 0.8, 0.9] }));
+      }
+    }
+    parts.push(place(paint(box(), '#6b4030'), { p: pt(side * 4.4, 0, Y - 1.1), r: [0, a, 0], s: [0.6, 0.6, L - 4] }));    // the steel beams under the deck
+  }
+}
+// Where the stream leaves the pool below the dam, and which way it runs.
+const CREEK = { x: -52, z: -92, u: new V3(-0.148, 0, -0.989) };
+// Yates Mill's moving parts, added to the track's mesh: water falling down the
+// dam, ripples running down the stream, and the waterwheel turning. They move
+// in steps 8 times a second, like the lines redraw.
+const DAM = { x0: -48, x1: 70, z: -76 }, MILL = { x: 92, z: -82 };
+function yatesLive(root) {
+  const H = DAM_H, len = DAM.x1 - DAM.x0, P = 2.4;             // P: from one drop of water to the next down a column
+  const fall = [], lip = [];
+  for (let cx = 0; cx < len; cx++) {
+    if (!damFlows(cx)) continue;
+    const x = DAM.x0 + cx + 0.5, phase = ((cx * 7) % 5) * 0.47;     // the drops staggered, column to column
+    for (let y = H - 2.2 - phase; y > -P; y -= P) {
+      fall.push(place(paint(box(), '#a9d3ea'), { p: [x, y, DAM.z - 1.3], s: [0.2, 1.4, 0.1] }));
+    }
+    lip.push(place(paint(box(), '#f4fafc'), { p: [x, H - 0.9, DAM.z - 1.45], s: [1, 2.1, 0.2] }));       // where it curls over the top
+  }
+  const falling = mesh(merge(fall));
+  root.add(falling, mesh(merge(lip)));
+  // Ripples: across the pool to the stream's mouth, then down the stream.
+  const RP = 6, pool = [], stream = [];
+  for (let x = DAM.x1 + 8; x > CREEK.x; x -= RP) {
+    for (const z of [-82, -88, -94]) pool.push(place(paint(box(), '#f4fafc'), { p: [x + (z % 4), 0.02, z], s: [1.8, 0.05, 0.35] }));
+  }
+  const a = Math.atan2(CREEK.u.x, CREEK.u.z);
+  for (let t = 4; t < 130; t += RP) {
+    for (const lat of [-4, 0, 4]) {
+      const p = new V3(CREEK.x, 0, CREEK.z).addScaledVector(CREEK.u, t + lat * 0.4).add(new V3(-CREEK.u.z, 0, CREEK.u.x).multiplyScalar(lat));
+      stream.push(place(paint(box(), '#f4fafc'), { p: [p.x, 0.02, p.z], r: [0, a, 0], s: [1.8, 0.05, 0.35] }));
+    }
+  }
+  const poolM = mesh(merge(pool)), streamM = mesh(merge(stream));
+  root.add(poolM, streamM);
+  const w = wheelAt(MILL.x, MILL.z), wheel = mesh(merge(wheelParts(w.R)));
+  wheel.position.set(w.x, w.y, w.z);
+  root.add(wheel);
+  return (time) => {
+    const t = Math.floor(time * 8) / 8;
+    falling.position.y = -((t * 7) % P);
+    poolM.position.x = -((t * 3) % RP);
+    streamM.position.copy(CREEK.u).multiplyScalar((t * 3) % RP);
+    wheel.rotation.z = -t * 0.9;                // the water lands on top and pushes it on, away from the dam
+  };
+}
+// A plank bridge where the main road crosses the stream, with water showing
+// on both sides, under the old steel bridge.
+function footbridge(parts) {
+  const wet = [];
+  for (let i = 0; i < N; i++) if (yatesWater(TP[i].x, TP[i].z) === 'creek') wet.push(i);
+  if (!wet.length) return;
+  const from = wet[0] - 3, to = wet[wet.length - 1] + 3, W = HALF + 1.4;
+  for (let i = from; i <= to; i++) {
+    const p = trackPoint(i, 0), a = headingAt(i);
+    parts.push(place(paint(box(), i % 2 ? '#a87a4c' : '#93683e'), { p: [p.x, 0.07, p.z], r: [0, a, 0], s: [2 * W, 0.1, (TL / N) * 0.92] }));
+    for (const side of [-1, 1]) {
+      const q = trackPoint(i, side * (W + 0.3));
+      if ((i - from) % 3 === 0) parts.push(place(paint(box(), '#7a5232'), { p: [q.x, 0.8, q.z], r: [0, a, 0], s: [0.4, 1.6, 0.4] }));
+      parts.push(place(paint(box(), '#b08a58'), { p: [q.x, 1.45, q.z], r: [0, a, 0], s: [0.3, 0.25, (TL / N) * 1.02] }));
+      // the stream, over the verge, from the railing out past the fence
+      const o = trackPoint(i, side * (W + 9));
+      parts.push(place(paint(box(), '#8a9c8c'), { p: [(q.x + o.x) / 2, 0.045, (q.z + o.z) / 2], r: [0, a, 0], s: [9, 0.02, (TL / N) * 1.05] }));
+    }
+  }
+}
+// Is (x, z) in the millpond, or in the pool and creek below the dam?
+function yatesWater(x, z) {
+  const wob = Math.sin(x * 0.07) * 0.05 + Math.sin(z * 0.09 + 1) * 0.05;
+  const pond = Math.min(((x + 5) / 125) ** 2 + ((z - 25) / 85) ** 2, ((x - 15) / 62) ** 2 + ((z + 22) / 40) ** 2) + wob;
+  if (pond < 1) return 'pond';
+  if (pond < 1.09) return 'bank';
+  if (x > -52 && x < 84 && z < -76 && z > -100 + Math.sin(x * 0.1) * 3) return 'creek';
+  // and on out of the pool to the north-west, under the old bridge
+  const dx = x - CREEK.x, dz = z - CREEK.z, t = THREE.MathUtils.clamp(dx * CREEK.u.x + dz * CREEK.u.z, 0, 140);
+  if (Math.hypot(dx - CREEK.u.x * t, dz - CREEK.u.z * t) < 9 + Math.sin(t * 0.2) * 1.5) return 'creek';
+  return null;
+}
+
 // What lines each side of the road, one piece every few steps.
 const BORDERS = {
   hedge: (parts, r, p) => {
@@ -1632,6 +1832,10 @@ const BORDERS = {
       parts.push(place(paint(new THREE.CylinderGeometry(0.22, 0.24, h, 6), (px, py) => (Math.abs(((py + h) % 1.1) - 0.55) < 0.08 ? '#4f8a2a' : '#7cbf4a')),
         { p: [x, h / 2, z] }));
     }
+  },
+  rail: (parts, r, p, i, a) => {                    // a weathered split-rail fence
+    parts.push(place(paint(box(), '#9a8f82'), { p: [p.x, 1, p.z], r: [0, a, 0], s: [0.45, 2, 0.45] }));
+    for (const y of [0.8, 1.6]) parts.push(place(paint(box(), r() < 0.5 ? '#b3aa9c' : '#a89e90'), { p: [p.x, y, p.z], r: [0, a, 0], s: [0.32, 0.32, 5.6] }));
   },
   marshmallow: (parts, r, p, i) => {
     parts.push(place(paint(new THREE.CylinderGeometry(0.9, 0.9, 1.6, 12), Math.floor(i / 3) % 2 ? '#ffd6e5' : '#fffdf6'),
@@ -1683,6 +1887,39 @@ const TRACKS = [
         const a = (k / 12) * Math.PI * 2;
         cabinets(parts, Math.sin(a) * 250, Math.cos(a) * 250, a);
       }
+    },
+  },
+  {
+    name: 'Yates Mill', blurb: 'Round the millpond, past the old mill and the waterfall',
+    ctrl: [[160, 40], [145, -30], [150, -95], [100, -128], [30, -126], [-40, -122], [-110, -105], [-160, -50], [-170, 30],
+      [-150, 100], [-100, 140], [-20, 148], [60, 145], [125, 120]],
+    road: '#bdb19c', line: null, curbs: ['#c8432b', '#f2e6cc'], verge: '#b8a46a', border: 'rail', borderStep: 3,
+    ground: (x, y) => {
+      const w = yatesWater(x, -y);
+      if (w === 'pond') return '#6f9fb0';
+      if (w === 'creek') return '#8a9c8c';
+      if (w === 'bank') return '#a8946a';
+      return Math.sin(x * 0.06) * Math.cos(y * 0.05) + Math.sin(x * 0.13 + y * 0.09) * 0.5 > 0.7 ? '#c9a058' : '#9cb350';   // leaves on the grass
+    },
+    keepOut: (x, z) => yatesWater(x, z) !== null,
+    live: yatesLive,
+    sky: [0.7, 0.77, 0.86], hills: ['#b8873f', '#8f9a45'], clouds: true,
+    props: [[0.45, autumnTree], [0.22, pine], [0.15, leafPile], [0.18, rock]], count: 240,
+    // Along the top of the dam past the mill, or the main road down by the
+    // creek under the old bridge; and the boardwalk across the pond.
+    branches: [
+      { from: [145, -30], to: [-110, -105], via: [[95, -58], [30, -63], [-40, -63], [-85, -80]], half: 5, road: '#9c948a', hazard: 'water' },
+      { from: [-170, 30], to: [60, 145], via: [[-100, 50], [-30, 75], [30, 110]], half: 5, road: '#a87a4c', hazard: 'water' },
+    ],
+    jumps: [[[30, -126], 0.45]], ramp: ['#c8432b', '#f2e6cc'], water: '#6f9fb0',
+    extra: (parts) => {
+      const r = rng(77);
+      dam(parts, r, DAM.x0, DAM.x1, DAM.z);
+      mill(parts, MILL.x, MILL.z);
+      footbridge(parts);
+      oldBridge(parts, sampleAt([-56, -121]));
+      sign(parts, 128, -50, -0.6);
+      sign(parts, -20, -104, Math.PI);
     },
   },
   // The harder tracks: more and tighter corners, a narrower road, slower
@@ -2080,6 +2317,7 @@ function buildTrack(def) {
   while (placed < def.count) {
     const x = (r() - 0.5) * (2 * R + 160), z = (r() - 0.5) * (2 * R + 160);
     if (nearTrack(new V3(x, 0, z), WALL + 8) || insideBorders(new V3(x, 0, z), 3)) continue;   // not where karts can drive
+    if (def.keepOut && def.keepOut(x, z)) continue;                                           // nor in the water
     placed++;
     let k = r();
     for (const [w, fn] of def.props) {
@@ -2176,7 +2414,10 @@ function loadTrack(def) {
   if (track) track.mesh.visible = false;
   track = def;
   shapeTrack(def);
-  if (!def.mesh) { def.mesh = buildTrack(def); scene.add(def.mesh); }
+  if (!def.mesh) {
+    def.mesh = buildTrack(def); scene.add(def.mesh);
+    if (def.live) def.animate = def.live(def.mesh);              // moving parts, children of the track's mesh
+  }
   def.mesh.visible = true;
   compMat.uniforms.uSky.value.set(...def.sky);
   for (const p of snacks) {
@@ -4251,6 +4492,7 @@ function frame(now) {
   syncRacers(t, dt);
   updateSnacks(dt, t);
   updateEffects(dt, t);
+  if (track.animate) track.animate(t);
   updateCamera(dt, t);
   netTick(now);
   updateSound();

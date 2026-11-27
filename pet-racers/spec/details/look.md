@@ -40,6 +40,9 @@ Things drawn on layer `LAYER_NO_EDGES` (the soft shadows) are skipped in pass 2.
 `N = 800` points, so all the per-step code (laps, steering help, snacks, rivals) works on
 any track. `buildTrack` makes one merged mesh per track the first time it's chosen;
 `loadTrack` hides the old one, shows the new one, sets the sky color and moves the snacks.
+A track with moving parts (Yates Mill's falling water, ripples and waterwheel) has a
+`live` function that adds them as children of that mesh and returns how to move them; the
+frame loop calls it, and they step 8 times a second, like the lines.
 
 A new track's control points need to keep every bend gentle and every pair of road
 sections apart. We check with a script before adding one: no two non-neighboring points

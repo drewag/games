@@ -48,6 +48,8 @@ should skip less.
 | Backyard | garden shortcut | 1 × rough | 1.16 s | 0.72 | 19.8 |
 | Kitchen | right wiggle | 2 pads | 0.08 s | | |
 | Kitchen | bottom dip | 4 pads | 0.24 s | | |
+| Yates Mill | dam top | 1 × water | 2.17 s | 0.72 | 19.8 |
+| Yates Mill | boardwalk | 1 × water | 1.09 s | 0.36 | 13.3 |
 | Snow | bottom-left corner | 1 × water | 1.12 s | 0.37 | 13.4 |
 | Bakery | top zig-zags | 2 pads | 0.25 s | | |
 | Bakery | top-right corner | 1 × water | 0.66 s | 0.22 | 10.7 |
