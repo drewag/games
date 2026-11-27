@@ -96,6 +96,18 @@
   .pc.on { opacity: 1; transform: translateY(-14px) scale(1.08) rotate(0deg); border-width: 5px; }
   .pc img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
   #pickInfo { font-size: 24px; margin-bottom: 10px; }
+  /* The pet step: a tall panel on the right with the cards in a big 3 x 3 grid,
+     as large as the screen allows, and the pet in its kart on the left. */
+  :root { --ch: min(calc((100dvh - 270px) / 3), calc((58vw - 70px) / 3 * 4 / 3)); }
+  #pick[data-step="pet"] {
+    left: auto; right: calc(18px + env(safe-area-inset-right)); bottom: auto; transform: none; width: auto;
+    top: 50%; translate: 0 -50%; padding: 16px 22px 16px;
+  }
+  #pick[data-step="pet"] #cards { display: grid; grid-template-columns: repeat(3, auto); justify-content: center; gap: 14px; margin-bottom: 14px; }
+  #pick[data-step="pet"] .pc { width: calc(var(--ch) * 0.75); height: var(--ch); border-width: 5px; border-radius: 8px; }
+  #pick[data-step="pet"] .pc.on { transform: scale(1.05) rotate(0deg); border-width: 7px; box-shadow: 0 0 0 5px #ffe58a, 4px 6px 0 rgba(90, 50, 20, 0.3); }
+  #pick[data-step="pet"] .pc span { font-size: 28px; }
+  #title.side { left: max(var(--kartX, 25%), 300px); }    /* over the kart, clear of the home and sound buttons */
   #modes { display: flex; justify-content: center; gap: 10px; margin: -2px 0 10px; }
   #tracks { display: flex; justify-content: center; gap: min(22px, 2vw); margin: 0 0 10px; }
   .trackSet > span { display: block; font-size: 20px; margin-bottom: 2px; }
@@ -183,7 +195,7 @@
   </div>
   <div id="big"></div>
   <div id="pop">Bonk!</div>
-  <div id="title" class="hidden">Pet Racers</div>
+  <div id="title" class="hidden side">Pet Racers</div>
   <div id="pick" class="drawn hidden" data-step="pet">
     <div id="cards" class="pet-step"></div>
     <div id="modes" class="pet-step"></div>
@@ -3673,8 +3685,16 @@ function updateCamera(dt, t) {
       wantPos = new V3(c.x + Math.sin(b) * 170 * k, 165 * k, c.z + Math.cos(b) * 170 * k);
       wantLook = new V3(c.x + Math.sin(b) * 55 * k, 0, c.z + Math.cos(b) * 55 * k);
     } else {
-      wantPos = new V3(player.pos.x + Math.sin(a) * 5, 2.3, player.pos.z + Math.cos(a) * 5);
-      wantLook = player.pos.clone().setY(0.15);     // low, so the kart sits above the pick panel
+      // The kart sits in the middle of the space left of the cards: look a
+      // little to its right, by as much as moves it there on screen.
+      const dist = 5, box = $('pick').getBoundingClientRect(), W = window.innerWidth || 1;
+      const cx = box.left > 0 ? box.left / 2 : W / 2;
+      document.documentElement.style.setProperty('--kartX', `${Math.round(cx)}px`);
+      const halfW = dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
+      const shift = -((cx / W) * 2 - 1) * halfW;
+      wantPos = new V3(player.pos.x + Math.sin(a) * dist, 2, player.pos.z + Math.cos(a) * dist);
+      const right = new V3(Math.cos(a), 0, -Math.sin(a));     // the camera's right, looking back at the kart
+      wantLook = player.pos.clone().setY(0.6).addScaledVector(right, shift);
     }
     // Glide between the two steps; otherwise stay put.
     const far = camPos.distanceTo(wantPos) > 1;
@@ -3836,6 +3856,7 @@ function setPickStep(step) {
   pickStep = isGuest() ? 'pet' : step;
   $('pick').dataset.step = pickStep;
   $('title').textContent = pickStep === 'track' ? 'Pick a track' : 'Pet Racers';
+  $('title').classList.toggle('side', pickStep === 'pet');
   updatePickUi();
 }
 // Easy or Pro driving. Each iPad picks its own, even in a room.

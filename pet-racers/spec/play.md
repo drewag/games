@@ -10,9 +10,11 @@ for whoever wants them: gas, hopping and drifting, as in Mario Kart.
 
 The **pick screen** has two steps, one after the other:
 
-1. **A pet.** The nine card scans sit in a row. Tapping a card picks that pet: it appears
-   in its kart, slowly turning, with the kart's name and the power's name under it.
-   **Easy driving** or **Pro: hop & drift** picks the controls. **Next ▶** goes on.
+1. **A pet.** The nine card scans fill a tall panel on the right, in a 3 × 3 grid as big
+   as the screen allows, so the writing on them can be read. Tapping a card picks that
+   pet: it appears on the left, in its kart, slowly turning, under the title. The pet's
+   name, kart and power sit under the cards, with **Easy driving** or **Pro: hop &
+   drift** to pick the controls, and **Next ▶** to go on.
 2. **A track.** The camera rises high over the track and slowly circles it. The tracks
    sit in one row of cards, each with a picture of the track from above (its roads,
    forks, water and jumps, on its own ground), in three groups: **Easy** (Park,
