@@ -19,7 +19,9 @@ The **pick screen** has two steps, one after the other:
    **◀ Pets** goes back.
 
 The game remembers the last pet, track and controls picked. Each iPad picks its own
-controls, even in a room.
+controls, even in a room. It also keeps the best time on each track and the pet who set
+it, shown after the track's line ("· Best: 84.3 s (Mango)"). Beating it adds
+"· New best!" to the finish card. Any finished race counts, alone or in a room, Easy or Pro.
 
 The **harder tracks** have more and tighter corners (hairpins on Snow, zig-zags in the
 Bakery, both in the Toy Room), a narrower road, a bigger slowdown off it, and rivals a

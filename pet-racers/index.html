@@ -3298,6 +3298,18 @@ function setPro(on) {
   updatePickUi();
 }
 
+// Best time on each track, with the pet who set it, kept on this iPad.
+const BEST_KEY = 'pet-racers-best';
+let bests = {};
+try { bests = JSON.parse(localStorage.getItem(BEST_KEY)) || {}; } catch (e) { bests = {}; }
+function saveBest(time) {
+  const b = bests[track.name];
+  if (b && b.time <= time) return false;
+  bests[track.name] = { time: +time.toFixed(1), pet: player.name };
+  try { localStorage.setItem(BEST_KEY, JSON.stringify(bests)); } catch (e) { /* private mode */ }
+  return true;
+}
+
 // Only the host picks the track in a room.
 function chooseTrack(def) {
   if (isGuest() || !def) return;
@@ -3315,7 +3327,8 @@ function updatePickUi() {
     el.classList.toggle('taken', friends.some((r) => r.name === el.dataset.name));
   }
   for (const el of $('tracks').querySelectorAll('button')) el.classList.toggle('on', el.dataset.name === track.name);
-  $('trackInfo').textContent = track.blurb;
+  const best = bests[track.name];
+  $('trackInfo').textContent = track.blurb + (best ? ` · Best: ${best.time.toFixed(1)} s (${best.pet})` : '');
   for (const el of $('modes').children) el.classList.toggle('on', el.dataset.pro === String(pro));
   $('tracks').classList.toggle('locked', guest);
   $('go').textContent = n ? 'Start!' : 'Race!';
@@ -3392,8 +3405,12 @@ const ORDINAL = ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9t
 function finish() {
   const place = placeOf(player);
   $('result').textContent = place === 1 ? 'You won!' : `${ORDINAL[place]} place!`;
-  if (state === 'race') sfx(place === 1 ? 'win' : 'finish');
-  $('sub').textContent = `${player.name} · ${raceTime.toFixed(1)} seconds`;
+  let newBest = false;
+  if (state === 'race') {
+    sfx(place === 1 ? 'win' : 'finish');
+    newBest = saveBest(raceTime);
+  }
+  $('sub').textContent = `${player.name} · ${raceTime.toFixed(1)} seconds` + (newBest ? ' · New best!' : '');
   updatePickUi();
   setState('done');
 }

@@ -27,6 +27,7 @@ match it.
 - [x] Narrow boost ramps; shortcuts over rough ground or water, balanced by a formula; boost lanes
 - [x] Mini map in the top right
 - [x] Rivals use items, their powers included
+- [x] Best time on each track, kept on the iPad
 
 ## Next
 
