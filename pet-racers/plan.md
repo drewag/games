@@ -25,6 +25,7 @@ match it.
 - [x] Items from snacks (Banana Peel, Cherry, Hot Pepper, the pet's power) with a spare; boost pads
 - [x] Forks and jumps on every track but the Park; rivals take branches and jump
 - [x] Narrow boost ramps; shortcuts over rough ground or water, balanced by a formula; boost lanes
+- [x] Mini map in the top right
 
 ## Next
 

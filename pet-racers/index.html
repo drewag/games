@@ -40,6 +40,10 @@
     position: absolute; top: calc(12px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
     padding: 6px 22px; font-size: 28px; white-space: nowrap; pointer-events: none;
   }
+  #map {
+    position: absolute; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right));
+    width: 170px; height: 170px; padding: 0; pointer-events: none; border-radius: 18px 255px 18px 225px / 225px 18px 255px 18px;
+  }
   .pad { position: absolute; bottom: calc(20px + env(safe-area-inset-bottom)); display: flex; gap: 18px; }
   #steer { left: calc(20px + env(safe-area-inset-left)); }
   #act, #pro { right: calc(20px + env(safe-area-inset-right)); }
@@ -150,6 +154,7 @@
   <a id="home" class="drawn" href="../" aria-label="Back to games">&#8962;</a>
   <button id="mute" class="drawn" aria-label="Sound on or off"></button>
   <div id="hud" class="drawn hidden"></div>
+  <canvas id="map" class="drawn hidden" aria-hidden="true"></canvas>
   <div id="steer" class="pad hidden">
     <div id="left" class="btn drawn" data-hold="left">&#9664;</div>
     <div id="right" class="btn drawn" data-hold="right">&#9654;</div>
@@ -3130,6 +3135,7 @@ function setState(s) {
   state = s;
   const racing = s === 'countdown' || s === 'race';
   $('hud').classList.toggle('hidden', !racing && s !== 'done');
+  $('map').classList.toggle('hidden', !racing && s !== 'done');
   $('steer').classList.toggle('hidden', !racing);
   $('act').classList.toggle('hidden', !racing);
   $('pro').classList.toggle('hidden', !racing || !pro);
@@ -3310,7 +3316,61 @@ function finish() {
   setState('done');
 }
 
+// Mini map, top right: the track from above, the same way up every lap, with
+// every kart as a dot in its pet's color. Yours is the biggest, with a white ring.
+// The roads are drawn once per track; the dots every frame.
+const MAP_PX = 170, MAP_PAD = 14;
+let mapBase = null, mapView = null;
+function buildMap() {
+  const dpr = Math.min(2, window.devicePixelRatio || 1), size = Math.round(MAP_PX * dpr);
+  const roads = [MAIN, ...BRANCHES];
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (const path of roads) for (const p of path.P) { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z); }
+  const k = (size - 2 * MAP_PAD * dpr) / Math.max(x1 - x0, z1 - z0);
+  const ox = size / 2 - ((x0 + x1) / 2) * k, oz = size / 2 - ((z0 + z1) / 2) * k;
+  const at = (p) => [ox + p.x * k, oz + p.z * k];
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  g.lineJoin = g.lineCap = 'round';
+  const stroke = (pts, width, color) => {
+    g.strokeStyle = color; g.lineWidth = width; g.beginPath();
+    pts.forEach((p, i) => { const [x, y] = at(p); if (i) g.lineTo(x, y); else g.moveTo(x, y); });
+    g.stroke();
+  };
+  const loop = (path) => (path.main ? [...path.P, path.P[0]] : path.P);
+  for (const path of roads) stroke(loop(path), Math.max(3, path.half * 2 * k) + 3 * dpr, INK);       // outlines first,
+  for (const path of roads) stroke(loop(path), Math.max(2, path.half * 2 * k), track.road);          // then the roads over them
+  for (const br of BRANCHES) for (const gap of br.gaps) {
+    stroke(br.P.slice(Math.floor(gap.a), Math.ceil(gap.b) + 1), Math.max(2, br.half * 2 * k), gap.kind === 'water' ? track.water : track.rough);
+  }
+  // the start line
+  const [sx, sy] = at(TP[0].clone().addScaledVector(TR[0], -HALF - 2)), [ex, ey] = at(TP[0].clone().addScaledVector(TR[0], HALF + 2));
+  g.strokeStyle = INK; g.lineWidth = 2.5 * dpr; g.beginPath(); g.moveTo(sx, sy); g.lineTo(ex, ey); g.stroke();
+  mapBase = c;
+  mapView = { track, at, dpr };
+}
+function updateMap() {
+  if (!mapView || mapView.track !== track) buildMap();
+  const el = $('map');
+  if (el.width !== mapBase.width) el.width = el.height = mapBase.width;
+  const g = el.getContext('2d'), { at, dpr } = mapView;
+  g.clearRect(0, 0, el.width, el.height);
+  g.drawImage(mapBase, 0, 0);
+  const dot = (r, rad, ring) => {
+    const [x, y] = at(r.pos);
+    g.beginPath(); g.arc(x, y, rad * dpr, 0, Math.PI * 2);
+    g.fillStyle = r.color; g.fill();
+    g.lineWidth = (ring ? 2.5 : 1.5) * dpr; g.strokeStyle = ring ? '#ffffff' : INK; g.stroke();
+    if (ring) { g.beginPath(); g.arc(x, y, (rad + 1.8) * dpr, 0, Math.PI * 2); g.strokeStyle = INK; g.lineWidth = 1.5 * dpr; g.stroke(); }
+  };
+  for (const r of rivals) dot(r, 3.5, false);
+  for (const r of friends) dot(r, 4.5, false);
+  dot(player, 5, true);
+}
+
 function updateHud(dt) {
+  updateMap();
   $('hud').textContent = `Lap ${Math.min(Math.max(player.lap, 1), LAPS)}/${LAPS}  ·  ${ORDINAL[placeOf(player)]}`;
   const me = player;
   if (me.rollT > 0) {

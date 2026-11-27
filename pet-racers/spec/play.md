@@ -86,7 +86,9 @@ After the finish line the kart drives itself, as in Easy.
 
 Karts start on a staggered grid behind the start line, with your racer at the back. A
 3-2-1-GO countdown starts the race. The top of the screen shows the lap (1/3) and your
-place (1st–9th). After the third lap, a card shows your place and time and offers
+place (1st–9th). A **mini map** in the top right shows the whole track from above, the
+same way up all race, with its forks and hazards, and every kart as a dot in its pet's
+color; yours is the biggest, ringed in white. After the third lap, a card shows your place and time and offers
 **Race again!** or a different pet.
 
 - **Off the road** (grass, or the kitchen counter) beyond the curbs slows the kart to
