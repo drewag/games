@@ -1101,7 +1101,7 @@ for (const r of RACERS) {
     path: null, pf: 0, plat: 0, bs: 0, s0: 0, netBs: 0, airY: 0, vy: 0,     // branches and jumps
     sunk: 0, sunkIn: null, fails: null,
     itemCd: 0, think: 0, held: 0,                                           // rivals' items
-    hopT: 0, hopY: 0, hopHeld: false, hopWas: false, drift: 0, driftLv: 0, driftYaw: 0,  // Pro driving
+    hopT: 0, hopY: 0, hopHeld: false, hopWas: false, kick: 0, kickDir: 0, drift: 0, driftLv: 0, driftYaw: 0,  // Pro driving
     charge: 0, boost: 0, stall: 0, gasAt: null,
     netS: 0, netLat: 0, remote: null,                                       // over the network
   });
@@ -2866,7 +2866,7 @@ function resetRace() {
       steer: 0, idx: Math.floor(wrap(f)), lap: 0, item: null, spare: null, rollT: 0, rollSlot: 'item', rush: 0, nibble: 0, brave: 0, remote: null,
       padT: 0, padCd: 0, path: MAIN, pf: Math.floor(wrap(f)), plat: lat, bs: 0, s0: 0, netBs: 0, airY: 0, vy: 0, sunk: 0, sunkIn: null, fails: null,
       itemCd: 0, think: 0, held: 0,
-      hopT: 0, hopY: 0, hopHeld: false, drift: 0, driftLv: 0, driftYaw: 0, charge: 0, boost: 0, stall: 0, gasAt: null });
+      hopT: 0, hopY: 0, hopHeld: false, kick: 0, kickDir: 0, drift: 0, driftLv: 0, driftYaw: 0, charge: 0, boost: 0, stall: 0, gasAt: null });
   });
   for (const p of snacks) { p.gone = 0; p.m.visible = !p.off; }
   clearFx();
@@ -2890,7 +2890,7 @@ const latOf = (pos, i) => pos.clone().sub(TP[i]).dot(TR[i]);
 // Pro driving, after Mario Kart: hold Go to drive, Back to brake and reverse.
 // Tap Hop for a little hop; land still holding it while steering and the kart
 // drifts that way until Hop is let go. Steering into the drift tightens it,
-// away widens it. A longer drift builds blue, then orange, then purple sparks,
+// away all but straightens it. A longer drift builds blue, then orange, then purple sparks,
 // and letting go with sparks showing gives a boost. Holding Go while "2" is
 // up in the countdown is a rocket start; holding it from "3" stalls.
 let REVERSE = 8;
@@ -2901,6 +2901,8 @@ const SPARKS = [                      // drift time needed, boost seconds
   { at: 2.8, boost: 1.7, color: '#b84cff' },
 ];
 const sparkLevel = (charge) => SPARKS.filter((k) => charge >= k.at).length;
+const HOP_KICK = 0.2;                 // radians the kart snaps into a turn as a hop or drift starts
+const DRIFT_FAST = [1.04, 1.07, 1.1, 1.13];   // top speed while drifting, by spark level
 
 function updateHop(me, dt, want, canDrive) {
   const pressed = input.hop && !me.hopWas;
@@ -2909,6 +2911,8 @@ function updateHop(me, dt, want, canDrive) {
   if (pressed && canDrive && me.hopT <= 0 && me.airY <= 0 && !me.drift && me.spin <= 0 && me.stall <= 0) {
     me.hopT = HOP_TIME;
     me.hopHeld = true;
+    me.kickDir = Math.abs(want) > 0.3 ? Math.sign(want) : 0;   // hopping while steering: snap that way
+    me.kick += me.kickDir * HOP_KICK;
     sfx('hop');
   }
   if (me.hopT > 0) {
@@ -2917,10 +2921,17 @@ function updateHop(me, dt, want, canDrive) {
     me.hopY = 4 * k * (1 - k) * 0.6;
     if (me.hopT === 0) { me.hopY = 0; puff(me.pos.clone().setY(0.3).addScaledVector(fwdOf(me), -1)); }
   }
-  // On the ground, still holding Hop from the hop, steering: start drifting.
-  if (!me.drift && me.hopHeld && me.hopT <= 0 && Math.abs(want) > 0.3 && me.speed > 10 * speedK) {
-    me.drift = Math.sign(want);
+  // The drift goes the way you steered as you hopped. Hopped going straight?
+  // Then the first way you steer, in the air or after.
+  if (!me.hopHeld) me.kickDir = 0;
+  const way = me.kickDir || (me.hopHeld && Math.abs(want) > 0.3 ? Math.sign(want) : 0);
+  if (me.hopHeld && me.hopT > 0 && !me.kickDir && way) { me.kickDir = way; me.kick += way * HOP_KICK; }
+  // Landed still holding Hop: start drifting that way.
+  if (!me.drift && me.hopHeld && me.hopT <= 0 && way && me.speed > 10 * speedK) {
+    me.drift = way;
     me.charge = 0;
+    if (me.kickDir !== me.drift) me.kick += me.drift * HOP_KICK;   // no snap yet this way: snap now
+    me.kickDir = 0;
   }
   if (!me.drift) { me.driftLv = 0; return; }
   if (me.spin > 0 || me.speed < 6 * speedK || !canDrive) {       // lost it: no boost
@@ -3078,6 +3089,7 @@ function updatePlayer(dt, canDrive) {
   else if (ground === 'verge' && !quick) target *= VERGE_SLOW;
   if (me.rush > 0) target *= 1.4;
   else if (me.nibble > 0) target *= 1.15;
+  if (me.drift && target > 0) target *= DRIFT_FAST[me.driftLv];
   if (me.boost > 0 && canDrive) target = Math.max(target, MAX_SPEED * 1.3);
   if (me.spin > 0) target *= 0.25;
   const coasting = !easy && target === 0 && !input.back && me.stall <= 0;
@@ -3088,10 +3100,15 @@ function updatePlayer(dt, canDrive) {
   let grip = THREE.MathUtils.clamp(Math.abs(me.speed) / MAX_SPEED, 0.25, 1);
   if (!easy) grip *= Math.min(1, Math.abs(me.speed) / 3);   // no turning on the spot
   if (flying) grip *= 0.35;                                 // not much steering in the air
+  if (me.kick) {                                            // a hop or drift's snap into the turn, over a few frames
+    const k = Math.abs(me.kick) < 0.002 ? me.kick : me.kick * Math.min(1, dt * 30);
+    me.heading -= k; me.kick -= k;
+  }
   if (me.drift) {
     // A drift is a slow, wide arc: half a full turn on its own, a bit less than
-    // a full turn steering in, nearly straight steering out.
-    me.heading -= me.drift * TURN * (0.5 + 0.35 * me.steer * me.drift) * grip * dt;
+    // a full turn steering in, all but straight steering out.
+    const lean = me.steer * me.drift;
+    me.heading -= me.drift * TURN * (0.5 + (lean > 0 ? 0.35 : 0.47) * lean) * grip * dt;
   } else {
     const air = me.hopT > 0 ? 0.5 : 1;                       // a hop only turns a little
     me.heading -= me.steer * TURN * grip * air * (me.speed < 0 ? -1 : 1) * dt;

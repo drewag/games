@@ -105,9 +105,14 @@ become a diamond, like a game pad, with Spare and Look back above its corners:
 A thumb can slide between buttons without lifting, from Go onto Hop for example. On a
 computer: up arrow or W for Go, down arrow or S for Back, Shift or X for Hop.
 
-**Drifting**: hop, and land still holding Hop while steering. The kart **drifts** that
-way, sliding with its nose turned in, until Hop is let go. Steering into the drift
-tightens it; steering away widens it. Drifting builds **sparks** at the back wheels:
+**Drifting**: hop while steering, and land still holding Hop. The kart **drifts** the way
+it was steered as it hopped (or, hopping going straight, the first way steered after),
+sliding with its nose turned in, until Hop is let go. That direction holds for the whole
+drift, even if the stick goes straight or the other way. Hopping while steering snaps
+the kart a little way into the turn straight away. A drift
+is a little faster than driving straight, and faster still with each colour of sparks.
+Steering into the drift
+tightens it; steering away straightens it out almost completely. Drifting builds **sparks** at the back wheels:
 blue, then orange, then purple, faster when steering into the drift. Letting go of Hop
 with sparks showing gives a **boost**: short for blue, longer for orange, longest for
 purple. A boost ignores the slowdown off the road. Getting spun out or slowing right down
